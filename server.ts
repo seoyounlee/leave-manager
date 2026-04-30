@@ -21,7 +21,11 @@ import {
 const app  = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "admin1234";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+if (!ADMIN_PASSWORD) {
+  console.error("❌  환경 변수 ADMIN_PASSWORD가 설정되지 않았습니다. .env 파일을 확인해주세요.");
+  process.exit(1);
+}
 
 app.use(cors());
 app.use(express.json());
@@ -205,7 +209,7 @@ app.get("/api/export/csv", requireAdmin, async (_req, res) => {
       "Content-Disposition",
       `attachment; filename*=UTF-8''${encodeURIComponent(`연차내역_${today}`)}.csv`
     );
-    res.send("﻿" + csv);
+    res.send("\uFEFF" + csv);
   } catch (e: unknown) {
     res.status(500).json({ error: (e as Error).message });
   }
