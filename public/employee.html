@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>내 연차 확인 · 신청</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { brand: { DEFAULT:'#2563eb', dark:'#1d4ed8' } },
+          animation: { 'fade-up': 'fadeUp .3s ease both' },
+          keyframes: { fadeUp: { from:{ opacity:0, transform:'translateY(12px)' }, to:{ opacity:1, transform:'translateY(0)' } } }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* SVG ring transition */
+    #ringFill { transition: stroke-dashoffset .7s cubic-bezier(.4,0,.2,1), stroke .4s; }
+    .blink-dot { animation: blink 1.4s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<div class="max-w-xl mx-auto px-4 py-8 pb-16 flex flex-col gap-5">
+
+  <!-- 헤더 -->
+  <div class="text-center">
+    <h1 class="text-2xl font-bold text-gray-900">🌿 내 연차 확인</h1>
+    <p class="text-sm text-gray-400 mt-1">이름을 선택하면 잔여 연차를 바로 확인할 수 있어요.</p>
+  </div>
+
+  <!-- ① 직원 선택 -->
+  <div class="bg-white rounded-2xl shadow-sm p-5">
+    <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">직원 선택</p>
+    <div id="empGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div class="col-span-2 sm:col-span-3 text-sm text-gray-300 py-2">로딩 중…</div>
+    </div>
+  </div>
+
+  <!-- ② 잔여 연차 히어로 -->
+  <div id="heroCard" class="hidden animate-fade-up bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 rounded-2xl shadow-xl p-6 text-white overflow-hidden relative">
+    <!-- 배경 데코 -->
+    <span class="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-white/5 pointer-events-none"></span>
+    <span class="absolute -bottom-8 -left-8 w-36 h-36 rounded-full bg-white/5 pointer-events-none"></span>
+
+    <p class="text-sm text-blue-200 font-semibold text-center mb-5" id="heroName">—</p>
+
+    <!-- SVG 링 -->
+    <div class="flex justify-center mb-5">
+      <div class="relative w-40 h-40">
+        <svg viewBox="0 0 168 168" class="w-full h-full">
+          <circle cx="84" cy="84" r="68" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="12"/>
+          <circle id="ringFill" cx="84" cy="84" r="68" fill="none"
+            stroke="#4ade80" stroke-width="12" stroke-linecap="round"
+            stroke-dasharray="427.3" stroke-dashoffset="427.3"
+            transform="rotate(-90 84 84)"/>
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span class="text-5xl font-extrabold leading-none" id="ringDays">0</span>
+          <span class="text-xs text-blue-200 mt-1">일 남음</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 요약 -->
+    <p class="text-sm text-blue-100 text-center mb-1" id="heroSummary"></p>
+
+    <!-- 대기중 뱃지 -->
+    <div id="pendingBadge" style="display:none" class="flex justify-center mt-2">
+      <span class="inline-flex items-center gap-2 bg-white/10 rounded-full px-4 py-1.5 text-xs">
+        <span class="blink-dot w-2 h-2 rounded-full bg-yellow-300 flex-shrink-0"></span>
+        <span id="pendingBadgeText"></span>
+      </span>
+    </div>
+
+    <!-- 세부 수치 -->
+    <div class="grid grid-cols-3 gap-px mt-6 pt-5 border-t border-white/15">
+      <div class="text-center">
+        <p class="text-[11px] text-blue-300 mb-1">총 연차</p>
+        <p class="text-xl font-bold text-blue-100" id="sTot">—</p>
+      </div>
+      <div class="text-center border-x border-white/15">
+        <p class="text-[11px] text-blue-300 mb-1">승인 사용</p>
+        <p class="text-xl font-bold text-red-300" id="sUsed">—</p>
+      </div>
+      <div class="text-center">
+        <p class="text-[11px] text-blue-300 mb-1">잔여</p>
+        <p class="text-xl font-bold text-green-300" id="sRem">—</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ 연차 신청 폼 -->
+  <div id="formCard" class="hidden animate-fade-up bg-white rounded-2xl shadow-sm p-5">
+    <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">연차 신청</p>
+
+    <!-- 안내 -->
+    <div class="flex items-start gap-2.5 bg-blue-50 border border-blue-100 rounded-xl p-3.5 mb-5 text-sm text-blue-700">
+      <span class="text-base flex-shrink-0">ℹ️</span>
+      <span>신청 후 <strong>관리자가 승인</strong>해야 연차가 차감됩니다. 신청 직후 잔여 연차는 변하지 않습니다.</span>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <!-- 날짜 -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1.5">날짜</label>
+        <input type="date" id="fDate" oninput="checkDateConflict()"
+          class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition" />
+        <!-- 중복 경고 -->
+        <div id="dateWarn" style="display:none" class="mt-2 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+          ⚠️ <span id="dateWarnText"></span>
+        </div>
+      </div>
+
+      <!-- 종류 -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1.5">종류</label>
+        <select id="fType" onchange="updateDayChip()"
+          class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
+          <option value="full">종일 (1일)</option>
+          <option value="half-am">오전반차 (0.5일)</option>
+          <option value="half-pm">오후반차 (0.5일)</option>
+        </select>
+        <div id="dayChip" class="mt-2 inline-flex items-center gap-1.5 bg-green-100 text-green-800 rounded-full px-3 py-1 text-xs font-bold">
+          ✂️ <span id="dayChipText">1일 차감</span>
+        </div>
+      </div>
+
+      <!-- 사유 -->
+      <div class="sm:col-span-2">
+        <label class="block text-xs font-semibold text-gray-500 mb-1.5">사유</label>
+        <textarea id="fReason" rows="3" placeholder="사유를 입력하세요"
+          class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition resize-none"></textarea>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3 mt-4">
+      <button onclick="submitRequest()"
+        class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-sm rounded-xl transition-all">
+        신청하기
+      </button>
+      <span id="formMsg" class="text-sm hidden"></span>
+    </div>
+  </div>
+
+  <!-- ④ 내 신청 내역 -->
+  <div id="listCard" class="hidden animate-fade-up bg-white rounded-2xl shadow-sm p-5">
+    <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">내 신청 내역</p>
+
+    <!-- 모바일: 카드 목록 / 데스크톱: 테이블 -->
+    <div id="reqMobile" class="flex flex-col gap-3 sm:hidden"></div>
+    <div class="hidden sm:block overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b-2 border-gray-100">
+            <th class="text-left text-xs font-semibold text-gray-400 pb-2 pr-3">날짜</th>
+            <th class="text-left text-xs font-semibold text-gray-400 pb-2 pr-3">종류</th>
+            <th class="text-left text-xs font-semibold text-gray-400 pb-2 pr-3">사유</th>
+            <th class="text-left text-xs font-semibold text-gray-400 pb-2 pr-3">상태</th>
+            <th class="text-left text-xs font-semibold text-gray-400 pb-2">메모</th>
+          </tr>
+        </thead>
+        <tbody id="reqBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="/index.html" class="text-center text-xs text-gray-300 hover:text-blue-400 transition">→ 관리자 페이지</a>
+</div>
+
+<script>
+  const API  = '/api';
+  const CIRC = 2 * Math.PI * 68;
+
+  let selectedEmpId   = null;
+  let employees       = [];
+  let myRequestCache  = [];
+
+  // ── 색상 ────────────────────────────────────────────────────────────────────
+  function ringColor(pct) {
+    return pct > .5 ? '#4ade80' : pct > .2 ? '#facc15' : '#f87171';
+  }
+
+  // ── 직원 목록 로드 ───────────────────────────────────────────────────────────
+  async function loadEmployees() {
+    employees = await fetch(`${API}/employees`).then(r => r.json());
+    renderGrid();
+  }
+
+  function renderGrid() {
+    const grid = document.getElementById('empGrid');
+    if (!employees.length) {
+      grid.innerHTML = '<p class="col-span-2 sm:col-span-3 text-sm text-gray-300">등록된 직원이 없습니다.</p>';
+      return;
+    }
+    grid.innerHTML = employees.map(e => {
+      const pct      = e.totalDays > 0 ? e.remainingDays / e.totalDays : 0;
+      const chipCls  = pct > .5 ? 'bg-green-100 text-green-700'
+                     : pct > .2 ? 'bg-yellow-100 text-yellow-700'
+                     :            'bg-red-100 text-red-700';
+      const isActive = e.id === selectedEmpId;
+      return `
+        <button onclick="selectEmp('${e.id}')"
+          class="flex flex-col items-center py-4 px-2 rounded-xl border-2 text-center transition-all
+                 ${isActive
+                   ? 'border-blue-500 bg-blue-50 text-blue-700'
+                   : 'border-gray-100 bg-gray-50 text-gray-700 hover:border-blue-300 hover:bg-blue-50'}">
+          <span class="font-bold text-sm">${esc(e.name)}</span>
+          <span class="mt-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${isActive ? 'bg-blue-100 text-blue-700' : chipCls}">
+            잔여 ${e.remainingDays}일
+          </span>
+        </button>`;
+    }).join('');
+  }
+
+  // ── 직원 선택 ───────────────────────────────────────────────────────────────
+  async function selectEmp(id) {
+    selectedEmpId  = id;
+    myRequestCache = [];
+    hide('dateWarn');
+    renderGrid();
+    ['heroCard','formCard','listCard'].forEach(cid => show(cid));
+    const emp = employees.find(e => e.id === id);
+    if (emp) { updateHero(emp, 0); await loadMyRequests(emp); }
+  }
+
+  function updateHero(emp, pendingCount) {
+    const pct   = emp.totalDays > 0 ? emp.remainingDays / emp.totalDays : 0;
+    const color = ringColor(pct);
+
+    document.getElementById('heroName').textContent = `${emp.name}님의 잔여 연차`;
+
+    // 링
+    const fill = document.getElementById('ringFill');
+    fill.style.stroke           = color;
+    fill.style.strokeDashoffset = CIRC;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      fill.style.strokeDashoffset = CIRC * (1 - pct);
+    }));
+
+    countUp('ringDays', emp.remainingDays, color);
+
+    document.getElementById('sTot').textContent  = emp.totalDays  + '일';
+    document.getElementById('sUsed').textContent = emp.usedDays   + '일';
+    document.getElementById('sRem').textContent  = emp.remainingDays + '일';
+
+    const usedPct = Math.round((emp.usedDays / emp.totalDays) * 100);
+    document.getElementById('heroSummary').innerHTML =
+      `총 <strong>${emp.totalDays}일</strong> 중 <strong>${emp.usedDays}일</strong> 승인 사용 (${usedPct}%)`;
+
+    if (pendingCount > 0) {
+      document.getElementById('pendingBadgeText').textContent = `대기중 신청 ${pendingCount}건 · 승인 시 추가 차감`;
+      show('pendingBadge');
+    } else {
+      hide('pendingBadge');
+    }
+  }
+
+  function countUp(elId, target, color) {
+    const el = document.getElementById(elId);
+    const dur = 600, begin = performance.now();
+    el.style.color = color;
+    function step(now) {
+      const t   = Math.min((now - begin) / dur, 1);
+      const ease = 1 - Math.pow(1 - t, 3);
+      const cur  = target * ease;
+      el.textContent = (Math.round(cur * 2) / 2).toFixed(target % 1 === 0 ? 0 : 1);
+      if (t < 1) requestAnimationFrame(step);
+      else el.textContent = target % 1 === 0 ? target : target.toFixed(1);
+    }
+    requestAnimationFrame(step);
+  }
+
+  // ── 신청 내역 로드 ───────────────────────────────────────────────────────────
+  async function loadMyRequests(emp) {
+    const list = await fetch(`${API}/requests?employeeId=${emp.id}`).then(r => r.json());
+    myRequestCache = list;
+    updateHero(emp, list.filter(r => r.status === 'pending').length);
+
+    // 모바일 카드
+    const mobile = document.getElementById('reqMobile');
+    // 데스크톱 테이블
+    const tbody  = document.getElementById('reqBody');
+
+    if (!list.length) {
+      mobile.innerHTML = `<p class="text-sm text-gray-300 text-center py-4">신청 내역이 없습니다.</p>`;
+      tbody.innerHTML  = `<tr><td colspan="5" class="text-center text-gray-300 py-6 text-sm">신청 내역이 없습니다.</td></tr>`;
+      return;
+    }
+
+    mobile.innerHTML = list.map(r => `
+      <div class="border border-gray-100 rounded-xl p-4 flex items-start justify-between gap-3">
+        <div class="flex flex-col gap-1.5">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-semibold text-sm text-gray-800">${r.date}</span>
+            <span class="${typeBadgeCls(r.type)} px-2 py-0.5 rounded-full text-xs font-semibold">${labelType(r.type)}</span>
+          </div>
+          <p class="text-xs text-gray-500">${esc(r.reason)}</p>
+          ${r.reviewNote ? `<p class="text-xs text-gray-400">${esc(r.reviewNote)}</p>` : ''}
+        </div>
+        <span class="${statusBadgeCls(r.status)} flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-bold">${labelStatus(r.status)}</span>
+      </div>
+    `).join('');
+
+    tbody.innerHTML = list.map(r => `
+      <tr class="border-b border-gray-50 hover:bg-gray-50 transition">
+        <td class="py-3 pr-3 text-sm text-gray-700 whitespace-nowrap">${r.date}</td>
+        <td class="py-3 pr-3"><span class="${typeBadgeCls(r.type)} px-2 py-0.5 rounded-full text-xs font-semibold">${labelType(r.type)}</span></td>
+        <td class="py-3 pr-3 text-sm text-gray-600 max-w-[140px] truncate">${esc(r.reason)}</td>
+        <td class="py-3 pr-3"><span class="${statusBadgeCls(r.status)} px-2.5 py-0.5 rounded-full text-xs font-bold">${labelStatus(r.status)}</span></td>
+        <td class="py-3 text-xs text-gray-400">${r.reviewNote ? esc(r.reviewNote) : '—'}</td>
+      </tr>
+    `).join('');
+  }
+
+  // ── 연차 신청 ───────────────────────────────────────────────────────────────
+  async function submitRequest() {
+    const date   = document.getElementById('fDate').value;
+    const type   = document.getElementById('fType').value;
+    const reason = document.getElementById('fReason').value.trim();
+    const msgEl  = document.getElementById('formMsg');
+
+    if (!date)   { showMsg(msgEl, '날짜를 선택해주세요.', false); return; }
+    if (!reason) { showMsg(msgEl, '사유를 입력해주세요.', false); return; }
+
+    const res = await fetch(`${API}/requests`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employeeId: selectedEmpId, date, type, reason }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showMsg(msgEl, data.error, false); return; }
+
+    showMsg(msgEl, '✅ 신청 완료. 관리자 승인 후 연차가 차감됩니다.', true);
+    document.getElementById('fReason').value = '';
+    hide('dateWarn');
+    myRequestCache = [];
+    employees = await fetch(`${API}/employees`).then(r => r.json());
+    renderGrid();
+    const emp = employees.find(e => e.id === selectedEmpId);
+    if (emp) await loadMyRequests(emp);
+  }
+
+  // ── 날짜 중복 체크 ───────────────────────────────────────────────────────────
+  async function checkDateConflict() {
+    const date   = document.getElementById('fDate').value;
+    const warnEl = document.getElementById('dateWarn');
+    hide('dateWarn');
+    if (!date || !selectedEmpId) return;
+    if (!myRequestCache.length) {
+      myRequestCache = await fetch(`${API}/requests?employeeId=${selectedEmpId}`).then(r => r.json());
+    }
+    const c = myRequestCache.find(r => r.date === date && (r.status === 'pending' || r.status === 'approved'));
+    if (c) {
+      document.getElementById('dateWarnText').textContent =
+        `이미 신청된 날짜입니다. (현재 상태: ${{ pending:'대기중', approved:'승인됨' }[c.status] ?? c.status})`;
+      show('dateWarn');
+    }
+  }
+
+  // ── 반차 칩 ─────────────────────────────────────────────────────────────────
+  function updateDayChip() {
+    const type = document.getElementById('fType').value;
+    const half = type !== 'full';
+    const chip = document.getElementById('dayChip');
+    document.getElementById('dayChipText').textContent = half ? '0.5일 차감' : '1일 차감';
+    chip.className = `mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold
+      ${half ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`;
+  }
+
+  // ── 유틸 ────────────────────────────────────────────────────────────────────
+  function show(id)  { document.getElementById(id).style.display = ''; }
+  function hide(id)  { document.getElementById(id).style.display = 'none'; }
+  function esc(s)   { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function labelType(t)   { return { full:'종일','half-am':'오전반차','half-pm':'오후반차' }[t] ?? t; }
+  function labelStatus(s) { return { pending:'대기중', approved:'승인', rejected:'반려' }[s] ?? s; }
+
+  function statusBadgeCls(s) {
+    return { pending:'bg-yellow-100 text-yellow-800', approved:'bg-green-100 text-green-800', rejected:'bg-red-100 text-red-800' }[s] ?? 'bg-gray-100 text-gray-600';
+  }
+  function typeBadgeCls(t) {
+    return { full:'bg-blue-100 text-blue-700','half-am':'bg-orange-100 text-orange-700','half-pm':'bg-purple-100 text-purple-700' }[t] ?? 'bg-gray-100 text-gray-600';
+  }
+
+  function showMsg(el, msg, ok) {
+    el.textContent = msg;
+    el.className   = `text-sm ${ok ? 'text-green-600' : 'text-red-500'}`;
+    el.classList.remove('hidden');
+  }
+
+  document.getElementById('fDate').value = new Date().toISOString().slice(0, 10);
+  loadEmployees();
+</script>
+</body>
+</html>

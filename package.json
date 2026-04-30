@@ -1,0 +1,27 @@
+{
+  "name": "leave-manager",
+  "version": "1.0.0",
+  "description": "연차 관리 시스템",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node server.ts"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "json2csv": "^6.0.0-alpha.2",
+    "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/json2csv": "^5.0.7",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.20.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}

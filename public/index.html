@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>연차 관리 · 관리자</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          keyframes: {
+            fadeUp: {
+              '0%':   { opacity: '0', transform: 'translateY(16px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+          },
+          animation: {
+            'fade-up': 'fadeUp .35s ease both',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    [x-cloak] { display: none; }
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: auto; }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-700">
+
+<!-- ── 로그인 오버레이 ──────────────────────────────────────────────────────── -->
+<div id="loginOverlay"
+     class="fixed inset-0 z-50 flex items-center justify-center
+            bg-gradient-to-br from-slate-900 via-blue-950 to-slate-800">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-10 flex flex-col gap-5 animate-fade-up">
+    <div class="text-center">
+      <div class="text-4xl mb-2">🔐</div>
+      <h2 class="text-xl font-bold text-slate-800">관리자 로그인</h2>
+      <p class="text-sm text-slate-400 mt-1">연차 관리 시스템 · 관리자 전용</p>
+    </div>
+    <input id="pwInput" type="password"
+           placeholder="비밀번호를 입력하세요"
+           onkeydown="if(event.key==='Enter') doLogin()"
+           class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-base
+                  tracking-widest bg-slate-50 focus:outline-none focus:border-blue-400
+                  focus:bg-white transition" />
+    <button onclick="doLogin()"
+            class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95
+                   text-white font-bold text-base transition">
+      로그인
+    </button>
+    <p id="loginErr" class="text-red-500 text-sm text-center min-h-[18px]"></p>
+  </div>
+</div>
+
+<!-- ── 메인 레이아웃 ───────────────────────────────────────────────────────── -->
+<div class="max-w-4xl mx-auto px-4 py-8 flex flex-col gap-5">
+
+  <!-- 헤더 -->
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-slate-800">🗂️ 연차 관리 · 관리자</h1>
+    <button onclick="doLogout()"
+            class="text-xs text-slate-400 hover:text-red-500 transition px-3 py-1.5
+                   rounded-lg hover:bg-red-50 font-medium">
+      🔓 로그아웃
+    </button>
+  </div>
+
+  <!-- 탭 -->
+  <div class="flex gap-1 bg-slate-200 rounded-xl p-1">
+    <button class="tab-btn flex-1 py-2 rounded-lg text-sm font-semibold transition active"
+            onclick="switchTab('pending')">
+      승인 대기 <span id="pendingCount" class="text-red-500 font-bold"></span>
+    </button>
+    <button class="tab-btn flex-1 py-2 rounded-lg text-sm font-semibold transition"
+            onclick="switchTab('all')">전체 내역</button>
+    <button class="tab-btn flex-1 py-2 rounded-lg text-sm font-semibold transition"
+            onclick="switchTab('employees')">직원 현황</button>
+  </div>
+
+  <!-- ── 탭: 승인 대기 ────────────────────────────────────────────────────── -->
+  <div id="tab-pending" class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-4 animate-fade-up">
+    <h2 class="font-semibold text-slate-500 text-sm">승인 대기 신청</h2>
+
+    <!-- 상태 흐름 안내 -->
+    <div class="flex flex-wrap items-center gap-2 bg-yellow-50 border border-yellow-200
+                rounded-xl px-4 py-3 text-xs text-yellow-800">
+      <span>📌 <strong>승인 버튼을 눌러야만</strong> 직원의 사용 연차가 차감됩니다.</span>
+      <span class="ml-auto flex flex-wrap items-center gap-1.5">
+        <span class="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-bold text-xs">대기중</span>
+        <span class="text-slate-400">→ 승인 클릭 →</span>
+        <span class="px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-bold text-xs">승인</span>
+        <span class="text-slate-300 mx-1">/</span>
+        <span class="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-bold text-xs">대기중</span>
+        <span class="text-slate-400">→ 반려 클릭 →</span>
+        <span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-xs">반려</span>
+      </span>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b-2 border-slate-100">
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold whitespace-nowrap">신청일</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">직원</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold whitespace-nowrap">날짜</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">종류</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">일수</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">사유</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">메모</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">처리</th>
+          </tr>
+        </thead>
+        <tbody id="pendingBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 탭: 전체 내역 ──────────────────────────────────────────────────── -->
+  <div id="tab-all" class="hidden bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-4 animate-fade-up">
+    <div class="flex items-center justify-between">
+      <h2 class="font-semibold text-slate-500 text-sm">전체 신청 내역</h2>
+      <button onclick="downloadCSV()"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600
+                     active:scale-95 text-white text-sm font-semibold rounded-xl transition">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        전체 내역 다운로드
+      </button>
+    </div>
+
+    <!-- 필터 버튼 -->
+    <div class="flex flex-wrap gap-2">
+      <button class="filter-btn px-4 py-1.5 border-2 border-slate-200 rounded-full text-xs font-semibold
+                     bg-slate-50 text-slate-500 transition active"
+              onclick="setFilter('all',this)">전체</button>
+      <button class="filter-btn px-4 py-1.5 border-2 border-slate-200 rounded-full text-xs font-semibold
+                     bg-slate-50 text-slate-500 transition"
+              onclick="setFilter('pending',this)">대기중</button>
+      <button class="filter-btn px-4 py-1.5 border-2 border-slate-200 rounded-full text-xs font-semibold
+                     bg-slate-50 text-slate-500 transition"
+              onclick="setFilter('approved',this)">승인</button>
+      <button class="filter-btn px-4 py-1.5 border-2 border-slate-200 rounded-full text-xs font-semibold
+                     bg-slate-50 text-slate-500 transition"
+              onclick="setFilter('rejected',this)">반려</button>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b-2 border-slate-100">
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold whitespace-nowrap">신청일</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">직원</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold whitespace-nowrap">날짜</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">종류</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">일수</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">사유</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">상태</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">메모</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">처리</th>
+          </tr>
+        </thead>
+        <tbody id="allBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 탭: 직원 현황 ──────────────────────────────────────────────────── -->
+  <div id="tab-employees" class="hidden bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-5 animate-fade-up">
+    <h2 class="font-semibold text-slate-500 text-sm">직원별 연차 현황</h2>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b-2 border-slate-100">
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">이름</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">총 연차</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">승인 사용</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">잔여</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">사용률</th>
+            <th class="text-left px-3 py-2 text-slate-400 font-semibold">총 연차 수정</th>
+          </tr>
+        </thead>
+        <tbody id="empBody"></tbody>
+      </table>
+    </div>
+
+    <!-- 직원 추가 폼 -->
+    <div class="flex flex-wrap items-end gap-3 pt-4 border-t border-slate-100">
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-slate-500">이름</label>
+        <input type="text" id="newName" placeholder="홍길동"
+               class="w-28 px-3 py-2 border border-slate-200 rounded-lg text-sm
+                      bg-slate-50 focus:outline-none focus:border-blue-400 focus:bg-white transition" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-medium text-slate-500">총 연차(일)</label>
+        <input type="number" id="newTotal" placeholder="15" min="1"
+               class="w-20 px-3 py-2 border border-slate-200 rounded-lg text-sm
+                      bg-slate-50 focus:outline-none focus:border-blue-400 focus:bg-white transition" />
+      </div>
+      <button onclick="addEmployee()"
+              class="px-4 py-2 bg-blue-500 hover:bg-blue-600 active:scale-95
+                     text-white text-sm font-semibold rounded-lg transition">
+        직원 추가
+      </button>
+      <span id="addEmpErr" class="text-red-500 text-xs"></span>
+    </div>
+  </div>
+
+  <a href="/employee.html"
+     class="text-center text-slate-400 text-xs hover:text-blue-400 transition mt-1 pb-2">
+    → 직원 신청 페이지
+  </a>
+</div>
+
+<!-- 탭 · 필터 활성 스타일 (Tailwind JIT 동적 클래스 대신 inline 스타일로 처리) -->
+<style>
+  .tab-btn { color: #64748b; }
+  .tab-btn.active { background: #fff; color: #1d4ed8; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .filter-btn.active { border-color: #60a5fa; background: #eff6ff; color: #1d4ed8; }
+
+  /* 행 hover */
+  tbody tr:hover td { background: #f8fafc; }
+  tbody tr.row-pending td { background: #fefce8; }
+  tbody tr.row-pending:hover td { background: #fef9c3; }
+</style>
+
+<script>
+  const API    = '/api';
+  const PW_KEY = 'adminPw';
+  let allFilter   = 'all';
+  let allRequests = [];
+  let employees   = [];
+
+  // ── 인증 헬퍼 ────────────────────────────────────────────────────────────────
+  function savedPw() { return sessionStorage.getItem(PW_KEY) ?? ''; }
+  function adminHeaders(extra = {}) {
+    return { 'Content-Type': 'application/json', 'X-Admin-Password': savedPw(), ...extra };
+  }
+
+  async function doLogin() {
+    const pw    = document.getElementById('pwInput').value;
+    const errEl = document.getElementById('loginErr');
+    errEl.textContent = '';
+    if (!pw) { errEl.textContent = '비밀번호를 입력해주세요.'; return; }
+
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+    });
+    if (!res.ok) {
+      errEl.textContent = '비밀번호가 올바르지 않습니다.';
+      document.getElementById('pwInput').value = '';
+      document.getElementById('pwInput').focus();
+      return;
+    }
+    sessionStorage.setItem(PW_KEY, pw);
+    document.getElementById('loginOverlay').style.display = 'none';
+    loadAll();
+  }
+
+  function doLogout() {
+    sessionStorage.removeItem(PW_KEY);
+    document.getElementById('pwInput').value = '';
+    document.getElementById('loginOverlay').style.display = 'flex';
+  }
+
+  // 페이지 로드 시 세션 검증
+  (async () => {
+    const pw = savedPw();
+    if (!pw) return;
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+    });
+    if (res.ok) {
+      document.getElementById('loginOverlay').style.display = 'none';
+      loadAll();
+    } else {
+      sessionStorage.removeItem(PW_KEY);
+    }
+  })();
+
+  // ── 데이터 로드 ──────────────────────────────────────────────────────────────
+  async function loadAll() {
+    [employees, allRequests] = await Promise.all([
+      fetch(`${API}/employees`).then(r => r.json()),
+      fetch(`${API}/requests`).then(r => r.json()),
+    ]);
+    renderAll();
+  }
+
+  function renderAll() {
+    renderPending();
+    renderAllRequests();
+    renderEmployees();
+    const n = allRequests.filter(r => r.status === 'pending').length;
+    document.getElementById('pendingCount').textContent = n ? `(${n})` : '';
+  }
+
+  // ── 대기중 탭 ────────────────────────────────────────────────────────────────
+  function renderPending() {
+    const list = allRequests.filter(r => r.status === 'pending')
+                            .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const tbody = document.getElementById('pendingBody');
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-slate-400 py-8">대기 중인 신청이 없습니다.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = list.map(r => {
+      const emp    = employees.find(e => e.id === r.employeeId);
+      const remTip = emp ? ` (현재 잔여: ${emp.remainingDays}일)` : '';
+      return `
+        <tr class="row-pending border-b border-slate-100 last:border-0">
+          <td class="px-3 py-3 text-xs text-slate-400 whitespace-nowrap">${fmtDate(r.createdAt)}</td>
+          <td class="px-3 py-3 font-semibold">${esc(r.employeeName)}</td>
+          <td class="px-3 py-3 whitespace-nowrap">${r.date}</td>
+          <td class="px-3 py-3"><span class="${typeBadgeCls(r.type)} px-2 py-0.5 rounded-full text-xs font-semibold">${labelType(r.type)}</span></td>
+          <td class="px-3 py-3" title="승인 시 ${r.days}일 차감${remTip}">${r.days}일</td>
+          <td class="px-3 py-3 text-slate-600 max-w-[140px] truncate">${esc(r.reason)}</td>
+          <td class="px-3 py-3">
+            <input id="note-${r.id}" placeholder="메모(선택)"
+                   class="w-32 px-2 py-1.5 border border-slate-200 rounded-lg text-xs
+                          focus:outline-none focus:border-blue-400 transition" />
+          </td>
+          <td class="px-3 py-3">
+            <div class="flex gap-1.5 whitespace-nowrap">
+              <button onclick="approve('${r.id}','${esc(r.employeeName)}',${r.days})"
+                      class="px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-800
+                             text-xs font-semibold rounded-lg transition active:scale-95">승인</button>
+              <button onclick="reject('${r.id}')"
+                      class="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700
+                             text-xs font-semibold rounded-lg transition active:scale-95">반려</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+  }
+
+  // ── 전체 내역 탭 ──────────────────────────────────────────────────────────────
+  function renderAllRequests() {
+    let list = allFilter === 'all' ? [...allRequests] : allRequests.filter(r => r.status === allFilter);
+    list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+    const tbody = document.getElementById('allBody');
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="9" class="text-center text-slate-400 py-8">내역이 없습니다.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = list.map(r => `
+      <tr class="${r.status === 'pending' ? 'row-pending' : ''} border-b border-slate-100 last:border-0">
+        <td class="px-3 py-3 text-xs text-slate-400 whitespace-nowrap">${fmtDate(r.createdAt)}</td>
+        <td class="px-3 py-3 font-medium">${esc(r.employeeName)}</td>
+        <td class="px-3 py-3 whitespace-nowrap">${r.date}</td>
+        <td class="px-3 py-3"><span class="${typeBadgeCls(r.type)} px-2 py-0.5 rounded-full text-xs font-semibold">${labelType(r.type)}</span></td>
+        <td class="px-3 py-3">${r.days}일</td>
+        <td class="px-3 py-3 text-slate-600 max-w-[130px] truncate">${esc(r.reason)}</td>
+        <td class="px-3 py-3"><span class="${statusBadgeCls(r.status)} px-2 py-0.5 rounded-full text-xs font-semibold">${labelStatus(r.status)}</span></td>
+        <td class="px-3 py-3 text-xs text-slate-400">${r.reviewNote ? esc(r.reviewNote) : '—'}</td>
+        <td class="px-3 py-3">
+          ${r.status === 'pending'
+            ? `<div class="flex gap-1.5">
+                 <button onclick="approve('${r.id}','${esc(r.employeeName)}',${r.days})"
+                         class="px-2.5 py-1 bg-green-100 hover:bg-green-200 text-green-800
+                                text-xs font-semibold rounded-lg transition active:scale-95">승인</button>
+                 <button onclick="reject('${r.id}')"
+                         class="px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-700
+                                text-xs font-semibold rounded-lg transition active:scale-95">반려</button>
+               </div>`
+            : r.status === 'approved'
+            ? `<button onclick="cancel('${r.id}','${esc(r.employeeName)}',${r.days})"
+                       class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600
+                              text-xs font-semibold rounded-lg transition active:scale-95">승인 취소</button>`
+            : '<span class="text-slate-300">—</span>'}
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // ── 직원 현황 탭 ──────────────────────────────────────────────────────────────
+  function renderEmployees() {
+    document.getElementById('empBody').innerHTML = employees.map(e => {
+      const pct = e.totalDays > 0 ? Math.round((e.usedDays / e.totalDays) * 100) : 0;
+      return `
+        <tr class="border-b border-slate-100 last:border-0">
+          <td class="px-3 py-3 font-semibold">${esc(e.name)}</td>
+          <td class="px-3 py-3">${e.totalDays}일</td>
+          <td class="px-3 py-3 text-red-500 font-medium">${e.usedDays}일</td>
+          <td class="px-3 py-3 text-emerald-600 font-bold">${e.remainingDays}일</td>
+          <td class="px-3 py-3">
+            <div class="flex items-center gap-2">
+              <div class="w-20 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                <div class="h-full rounded-full bg-gradient-to-r from-blue-400 to-blue-500"
+                     style="width:${pct}%"></div>
+              </div>
+              <span class="text-xs text-slate-400">${pct}%</span>
+            </div>
+          </td>
+          <td class="px-3 py-3">
+            <div class="flex items-center gap-2">
+              <input type="number" id="tot-${e.id}" value="${e.totalDays}" min="1"
+                     class="w-16 px-2 py-1.5 border border-slate-200 rounded-lg text-sm
+                            focus:outline-none focus:border-blue-400 transition" />
+              <button onclick="updateTotal('${e.id}')"
+                      class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 active:scale-95
+                             text-white text-xs font-semibold rounded-lg transition">변경</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+  }
+
+  // ── 승인 ──────────────────────────────────────────────────────────────────────
+  async function approve(id, name, days) {
+    if (!confirm(`${name}의 연차 ${days}일을 승인합니다.\n승인 즉시 사용 연차가 차감됩니다.`)) return;
+    const noteEl = document.getElementById(`note-${id}`);
+    const note   = noteEl ? noteEl.value.trim() : '';
+    const res    = await fetch(`${API}/requests/${id}/approve`, {
+      method: 'PATCH', headers: adminHeaders(), body: JSON.stringify({ note }),
+    });
+    const data = await res.json();
+    if (res.status === 401) { alert('세션이 만료되었습니다. 다시 로그인해주세요.'); doLogout(); return; }
+    if (!res.ok) { alert(`오류: ${data.error}`); return; }
+    employees = data.employees; allRequests = data.requests; renderAll();
+  }
+
+  // ── 반려 ──────────────────────────────────────────────────────────────────────
+  async function reject(id) {
+    const noteEl = document.getElementById(`note-${id}`);
+    const note   = (noteEl ? noteEl.value.trim() : '') || (prompt('반려 사유를 입력하세요 (선택)') ?? '');
+    const res    = await fetch(`${API}/requests/${id}/reject`, {
+      method: 'PATCH', headers: adminHeaders(), body: JSON.stringify({ note }),
+    });
+    const data = await res.json();
+    if (res.status === 401) { doLogout(); return; }
+    if (!res.ok) { alert(`오류: ${data.error}`); return; }
+    employees = data.employees; allRequests = data.requests; renderAll();
+  }
+
+  // ── 승인 취소 ────────────────────────────────────────────────────────────────
+  async function cancel(id, name, days) {
+    if (!confirm(`${name}의 승인된 연차 ${days}일을 취소합니다.\n사용 연차가 복원됩니다.`)) return;
+    const res  = await fetch(`${API}/requests/${id}/cancel`, {
+      method: 'PATCH', headers: adminHeaders(),
+    });
+    const data = await res.json();
+    if (res.status === 401) { doLogout(); return; }
+    if (!res.ok) { alert(`오류: ${data.error}`); return; }
+    employees = data.employees; allRequests = data.requests; renderAll();
+  }
+
+  // ── 직원 총 연차 수정 ────────────────────────────────────────────────────────
+  async function updateTotal(empId) {
+    const val = parseFloat(document.getElementById(`tot-${empId}`).value);
+    const res = await fetch(`${API}/employees/${empId}/total`, {
+      method: 'PATCH', headers: adminHeaders(), body: JSON.stringify({ totalDays: val }),
+    });
+    const data = await res.json();
+    if (res.status === 401) { doLogout(); return; }
+    if (!res.ok) { alert(`오류: ${data.error}`); return; }
+    employees = data; renderEmployees();
+  }
+
+  // ── 직원 추가 ────────────────────────────────────────────────────────────────
+  async function addEmployee() {
+    const name  = document.getElementById('newName').value.trim();
+    const total = parseFloat(document.getElementById('newTotal').value);
+    const errEl = document.getElementById('addEmpErr');
+    if (!name || isNaN(total) || total <= 0) { errEl.textContent = '이름과 총 연차를 올바르게 입력하세요.'; return; }
+    errEl.textContent = '';
+    const res = await fetch(`${API}/employees`, {
+      method: 'POST', headers: adminHeaders(), body: JSON.stringify({ name, totalDays: total }),
+    });
+    const data = await res.json();
+    if (res.status === 401) { doLogout(); return; }
+    if (!res.ok) { errEl.textContent = data.error; return; }
+    employees = data;
+    document.getElementById('newName').value  = '';
+    document.getElementById('newTotal').value = '';
+    renderEmployees();
+  }
+
+  // ── CSV 다운로드 ──────────────────────────────────────────────────────────────
+  async function downloadCSV() {
+    const res = await fetch(`${API}/export/csv`, { headers: { 'X-Admin-Password': savedPw() } });
+    if (res.status === 401) { doLogout(); return; }
+    if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error ?? 'CSV 생성 실패'); return; }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), {
+      href: url, download: `연차내역_${new Date().toISOString().slice(0, 10)}.csv`,
+    });
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+
+  // ── 탭 / 필터 ────────────────────────────────────────────────────────────────
+  function switchTab(tab) {
+    ['pending', 'all', 'employees'].forEach(t =>
+      document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tab)
+    );
+    document.querySelectorAll('.tab-btn').forEach((btn, i) =>
+      btn.classList.toggle('active', ['pending', 'all', 'employees'][i] === tab)
+    );
+  }
+  function setFilter(f, el) {
+    allFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    renderAllRequests();
+  }
+
+  // ── 배지 헬퍼 ────────────────────────────────────────────────────────────────
+  function statusBadgeCls(s) {
+    return {
+      pending:  'bg-yellow-100 text-yellow-800',
+      approved: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-700',
+    }[s] ?? 'bg-slate-100 text-slate-500';
+  }
+  function typeBadgeCls(t) {
+    return {
+      full:      'bg-blue-100 text-blue-700',
+      'half-am': 'bg-orange-100 text-orange-700',
+      'half-pm': 'bg-purple-100 text-purple-700',
+    }[t] ?? 'bg-slate-100 text-slate-500';
+  }
+
+  // ── 유틸 ──────────────────────────────────────────────────────────────────────
+  function esc(s)         { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function labelType(t)   { return { full:'종일', 'half-am':'오전반차', 'half-pm':'오후반차' }[t] ?? t; }
+  function labelStatus(s) { return { pending:'대기중', approved:'승인', rejected:'반려' }[s] ?? s; }
+  function fmtDate(iso) {
+    const d = new Date(iso);
+    return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+
+  loadAll();
+</script>
+</body>
+</html>
