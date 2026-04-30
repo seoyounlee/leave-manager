@@ -175,38 +175,51 @@ export async function approveRequest(
   requestId: string,
   note?: string
 ): Promise<{ employees: Employee[]; requests: LeaveRequest[] }> {
-  const reqRes = await pool.query("SELECT * FROM leave_requests WHERE id = $1", [requestId]);
-  if (!reqRes.rows.length) throw new Error("신청 내역을 찾을 수 없습니다.");
-  const req = reqRes.rows[0];
-
-  if (req.status !== "pending") {
-    throw new Error(`승인할 수 없는 상태입니다. (현재: ${STATUS_KO[req.status as RequestStatus]})`);
-  }
-
-  const empRes = await pool.query("SELECT * FROM employees WHERE id = $1", [req.employee_id]);
-  if (!empRes.rows.length) throw new Error("직원을 찾을 수 없습니다.");
-  const emp = empRes.rows[0];
-
-  const remaining = round1(parseFloat(emp.total_days) - parseFloat(emp.used_days));
-  if (parseFloat(req.days) > remaining) {
-    throw new Error(`잔여 연차(${remaining}일)가 부족합니다. (신청: ${req.days}일)`);
-  }
-
-  const now = new Date().toISOString();
-  await pool.query("BEGIN");
+  const client = await pool.connect();
   try {
-    await pool.query(
+    await client.query("BEGIN");
+
+    // 신청 확인 + 행 잠금 (동시 승인 방지)
+    const reqRes = await client.query(
+      "SELECT * FROM leave_requests WHERE id = $1 FOR UPDATE",
+      [requestId]
+    );
+    if (!reqRes.rows.length) throw new Error("신청 내역을 찾을 수 없습니다.");
+    const req = reqRes.rows[0];
+
+    if (req.status !== "pending") {
+      throw new Error(`승인할 수 없는 상태입니다. (현재: ${STATUS_KO[req.status as RequestStatus]})`);
+    }
+
+    // 직원 행 잠금 + 잔여 검사
+    const empRes = await client.query(
+      "SELECT * FROM employees WHERE id = $1 FOR UPDATE",
+      [req.employee_id]
+    );
+    if (!empRes.rows.length) throw new Error("직원을 찾을 수 없습니다.");
+    const emp = empRes.rows[0];
+
+    const remaining = round1(parseFloat(emp.total_days) - parseFloat(emp.used_days));
+    if (parseFloat(req.days) > remaining) {
+      throw new Error(`잔여 연차(${remaining}일)가 부족합니다. (신청: ${req.days}일)`);
+    }
+
+    const now = new Date().toISOString();
+    await client.query(
       "UPDATE leave_requests SET status='approved', reviewed_at=$1, review_note=$2 WHERE id=$3",
       [now, note ?? null, requestId]
     );
-    await pool.query(
+    await client.query(
       "UPDATE employees SET used_days = used_days + $1 WHERE id = $2",
       [req.days, req.employee_id]
     );
-    await pool.query("COMMIT");
+
+    await client.query("COMMIT");
   } catch (e) {
-    await pool.query("ROLLBACK");
+    await client.query("ROLLBACK");
     throw e;
+  } finally {
+    client.release();
   }
 
   return { employees: await getEmployees(), requests: await getRequests() };
@@ -239,28 +252,36 @@ export async function rejectRequest(
 export async function cancelApproved(
   requestId: string
 ): Promise<{ employees: Employee[]; requests: LeaveRequest[] }> {
-  const reqRes = await pool.query("SELECT * FROM leave_requests WHERE id = $1", [requestId]);
-  if (!reqRes.rows.length) throw new Error("신청 내역을 찾을 수 없습니다.");
-  const req = reqRes.rows[0];
-
-  if (req.status !== "approved") {
-    throw new Error(`승인 취소할 수 없는 상태입니다. (현재: ${STATUS_KO[req.status as RequestStatus]})`);
-  }
-
-  await pool.query("BEGIN");
+  const client = await pool.connect();
   try {
-    await pool.query(
+    await client.query("BEGIN");
+
+    const reqRes = await client.query(
+      "SELECT * FROM leave_requests WHERE id = $1 FOR UPDATE",
+      [requestId]
+    );
+    if (!reqRes.rows.length) throw new Error("신청 내역을 찾을 수 없습니다.");
+    const req = reqRes.rows[0];
+
+    if (req.status !== "approved") {
+      throw new Error(`승인 취소할 수 없는 상태입니다. (현재: ${STATUS_KO[req.status as RequestStatus]})`);
+    }
+
+    await client.query(
       "UPDATE leave_requests SET status='rejected', reviewed_at=$1, review_note='관리자 승인 취소' WHERE id=$2",
       [new Date().toISOString(), requestId]
     );
-    await pool.query(
+    await client.query(
       "UPDATE employees SET used_days = GREATEST(0, used_days - $1) WHERE id = $2",
       [req.days, req.employee_id]
     );
-    await pool.query("COMMIT");
+
+    await client.query("COMMIT");
   } catch (e) {
-    await pool.query("ROLLBACK");
+    await client.query("ROLLBACK");
     throw e;
+  } finally {
+    client.release();
   }
 
   return { employees: await getEmployees(), requests: await getRequests() };
