@@ -19,7 +19,7 @@ import {
 } from "./data-handler";
 
 const app  = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+const PORT = process.env.PORT || 3000;
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 if (!ADMIN_PASSWORD) {
