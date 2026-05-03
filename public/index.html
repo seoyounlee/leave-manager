@@ -168,6 +168,15 @@
     </div>
   </div>
 
+  <!-- 촉진 통지 알림 -->
+  <div id="promoAlert" style="display:none" class="animate-fade-up bg-red-50 border-2 border-red-200 rounded-2xl p-5">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="text-lg">📋</span>
+      <p class="text-sm font-bold text-red-700">연차사용 촉진 통지가 있습니다</p>
+    </div>
+    <div id="promoAlertList" class="flex flex-col gap-2"></div>
+  </div>
+
   <!-- 내 신청 내역 -->
   <div id="listCard" style="display:none" class="animate-fade-up bg-white rounded-2xl shadow-sm p-5">
     <div class="flex items-center justify-between mb-4">
@@ -225,7 +234,7 @@
     const id = document.getElementById('empSelect').value;
     if (!id) {
       selectedEmpId = null;
-      ['heroCard','calCard','formCard','listCard'].forEach(cid => hide(cid));
+      ['heroCard','calCard','formCard','listCard','promoAlert'].forEach(cid => hide(cid));
       return;
     }
     selectEmp(id);
@@ -240,7 +249,7 @@
     document.getElementById('formMsg').textContent = '';
     ['heroCard','calCard','formCard','listCard'].forEach(cid => show(cid));
     const emp = employees.find(e => e.id === id);
-    if (emp) { updateHero(emp, 0); await loadMyRequests(emp); await loadCalData(); }
+    if (emp) { updateHero(emp, 0); await loadMyRequests(emp); await loadCalData(); await loadPromotions(id); }
   }
 
   function updateHero(emp, pendingCount) {
@@ -437,6 +446,34 @@
   function showMsg(el, msg, ok) {
     el.textContent = msg;
     el.className   = `text-sm ${ok ? 'text-green-600' : 'text-red-500'}`;
+  }
+
+  // ── 촉진 통지 ──────────────────────────────────────────────────────────────
+  async function loadPromotions(empId) {
+    const promos = await fetch(`${API}/promotions/${empId}`).then(r=>r.json());
+    const unconfirmed = promos.filter(p => !p.confirmedAt);
+    const alertEl = document.getElementById('promoAlert');
+    const listEl = document.getElementById('promoAlertList');
+    if (!unconfirmed.length) { alertEl.style.display = 'none'; return; }
+    alertEl.style.display = 'block';
+    listEl.innerHTML = unconfirmed.map(p => `
+      <div class="bg-white rounded-xl p-4 border border-red-100">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold ${p.round===1?'text-orange-600':'text-red-600'}">${p.round}차 촉진 (${new Date(p.sentAt).toLocaleDateString('ko-KR')})</span>
+        </div>
+        <p class="text-xs text-gray-600 mb-3">잔여 연차 <strong>${p.snapshot['잔여연차']||0}일</strong>의 사용을 촉진합니다.</p>
+        <button onclick="confirmPromo('${p.id}')" class="w-full py-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white text-sm font-bold rounded-lg transition">촉진 통지를 확인했습니다</button>
+      </div>
+    `).join('');
+  }
+
+  async function confirmPromo(promoId) {
+    if (!confirm('촉진 통지를 확인하시겠습니까?\n확인 시점이 기록됩니다.')) return;
+    const res = await fetch(`${API}/promotions/${promoId}/confirm`, { method: 'PATCH' });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error); return; }
+    alert('확인이 기록되었습니다.');
+    if (selectedEmpId) loadPromotions(selectedEmpId);
   }
 
   // ── 달력 ───────────────────────────────────────────────────────────────────

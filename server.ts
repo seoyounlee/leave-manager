@@ -20,6 +20,10 @@ import {
   getEmployeeMemo,
   startLeaveYear,
   grantExtraDays,
+  createPromotion,
+  getPromotions,
+  confirmPromotion,
+  resetPromotionStatus,
   setEmployeePassword,
   verifyEmployeePassword,
   LEAVE_TYPE_KO,
@@ -235,6 +239,51 @@ app.post("/api/leave-years/grant", requireAdmin, async (req, res) => {
   }
   try {
     res.json(await grantExtraDays(employeeIds, days, reason.trim(), year));
+  } catch (e: unknown) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+// ─── 연차 촉진 ──────────────────────────────────────────────────────────────
+
+app.post("/api/promotions", requireAdmin, async (req, res) => {
+  const { employeeId, year, round, adminNote } = req.body as {
+    employeeId?: string; year?: number; round?: number; adminNote?: string;
+  };
+  if (!employeeId || !year || !round) {
+    res.status(400).json({ error: "employeeId, year, round는 필수입니다." }); return;
+  }
+  if (round !== 1 && round !== 2) {
+    res.status(400).json({ error: "round는 1 또는 2여야 합니다." }); return;
+  }
+  try {
+    res.json(await createPromotion(employeeId, year, round, adminNote));
+  } catch (e: unknown) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+app.get("/api/promotions/:employeeId", async (req, res) => {
+  const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+  try {
+    res.json(await getPromotions(req.params.employeeId as string, year));
+  } catch (e: unknown) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+app.patch("/api/promotions/:id/confirm", async (req, res) => {
+  try {
+    res.json(await confirmPromotion(req.params.id as string));
+  } catch (e: unknown) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+app.patch("/api/employees/:id/promotion-reset", requireAdmin, async (req, res) => {
+  try {
+    await resetPromotionStatus(req.params.id as string);
+    res.json({ ok: true });
   } catch (e: unknown) {
     res.status(400).json({ error: (e as Error).message });
   }

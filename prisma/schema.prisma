@@ -9,23 +9,31 @@ datasource db {
 }
 
 model Employee {
-  id         String         @id @default(cuid())
-  name       String
-  department String         @default("")
-  password   String?
-  memo       String?
-  joinedAt   DateTime
-  status     EmployeeStatus @default(ACTIVE)
-  resignedAt DateTime?
-  createdAt  DateTime       @default(now())
-  totalDays  Float          @default(0)
-  leaveYears LeaveYear[]
-  requests   LeaveRequest[]
+  id              String          @id @default(cuid())
+  name            String
+  department      String          @default("")
+  password        String?
+  memo            String?
+  joinedAt        DateTime
+  status          EmployeeStatus  @default(ACTIVE)
+  promotionStatus PromotionStatus @default(NONE)
+  resignedAt      DateTime?
+  createdAt       DateTime        @default(now())
+  totalDays       Float           @default(0)
+  leaveYears      LeaveYear[]
+  requests        LeaveRequest[]
+  promotions      LeavePromotion[]
 }
 
 enum EmployeeStatus {
   ACTIVE
   RESIGNED
+}
+
+enum PromotionStatus {
+  NONE
+  FIRST_DONE
+  SECOND_DONE
 }
 
 model LeaveYear {
@@ -55,6 +63,18 @@ model LeaveRequest {
   reviewNote String?
   createdAt  DateTime  @default(now())
   reviewedAt DateTime?
+}
+
+model LeavePromotion {
+  id          String    @id @default(cuid())
+  employee    Employee  @relation(fields: [employeeId], references: [id])
+  employeeId  String
+  year        Int
+  round       Int
+  snapshot    String
+  adminNote   String?
+  sentAt      DateTime  @default(now())
+  confirmedAt DateTime?
 }
 
 enum LeaveType {

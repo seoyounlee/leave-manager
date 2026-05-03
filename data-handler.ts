@@ -37,6 +37,7 @@ export interface EmployeeWithYear {
   name: string;
   department: string;
   status: string;
+  promotionStatus: string;
   joinedAt: string;
   resignedAt: string | null;
   year: number;
@@ -46,6 +47,18 @@ export interface EmployeeWithYear {
   carryOver: number;
   hasPassword: boolean;
   leaveNote: string | null;
+}
+
+export interface PromotionView {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  year: number;
+  round: number;
+  snapshot: Record<string, unknown>;
+  adminNote: string | null;
+  sentAt: string;
+  confirmedAt: string | null;
 }
 
 export interface RequestView {
@@ -81,6 +94,7 @@ function toEmployeeView(emp: Employee, ly: LeaveYear | null): EmployeeWithYear {
     name: emp.name,
     department: emp.department,
     status: emp.status,
+    promotionStatus: emp.promotionStatus,
     joinedAt: emp.joinedAt.toISOString(),
     resignedAt: emp.resignedAt?.toISOString() ?? null,
     year: ly?.year ?? currentYear(),
@@ -549,4 +563,134 @@ export async function cancelApproved(
 
   const y = req.year;
   return { employees: await getEmployees(y), requests: await getRequests({ year: y }) };
+}
+
+// ─── 연차 촉진 ──────────────────────────────────────────────────────────────
+
+export async function createPromotion(
+  employeeId: string,
+  year: number,
+  round: number,
+  adminNote?: string,
+): Promise<PromotionView> {
+  const emp = await prisma.employee.findUnique({ where: { id: employeeId } });
+  if (!emp) throw new Error("직원을 찾을 수 없습니다.");
+
+  const ly = await prisma.leaveYear.findUnique({
+    where: { employeeId_year: { employeeId, year } },
+  });
+  if (!ly) throw new Error(`${year}년 연차 기간이 없습니다.`);
+
+  if (round === 1 && emp.promotionStatus !== "NONE") {
+    throw new Error("이미 1차 촉진이 완료된 직원입니다.");
+  }
+  if (round === 2 && emp.promotionStatus !== "FIRST_DONE") {
+    throw new Error("1차 촉진을 먼저 완료해야 합니다.");
+  }
+
+  const remaining = round1(ly.totalDays - ly.usedDays);
+  const approvedReqs = await prisma.leaveRequest.findMany({
+    where: { employeeId, year, status: "APPROVED" },
+    orderBy: { date: "asc" },
+  });
+
+  const snapshot = {
+    촉진일시: new Date().toISOString(),
+    촉진차수: round === 1 ? "1차 촉진 (사용 촉구)" : "2차 촉진 (사용 시기 지정)",
+    직원명: emp.name,
+    부서: emp.department,
+    입사일: emp.joinedAt.toISOString().slice(0, 10),
+    연차기간: `${year}년`,
+    총연차: ly.totalDays,
+    사용연차: ly.usedDays,
+    잔여연차: remaining,
+    이월일수: ly.carryOver,
+    사용내역: approvedReqs.map((r) => ({
+      날짜: r.date,
+      종류: LEAVE_TYPE_KO[r.type as LeaveType] ?? r.type,
+      일수: r.days,
+      사유: r.reason,
+    })),
+    관리자메모: adminNote || null,
+  };
+
+  const promo = await prisma.leavePromotion.create({
+    data: {
+      employeeId,
+      year,
+      round,
+      snapshot: JSON.stringify(snapshot),
+      adminNote: adminNote || null,
+    },
+  });
+
+  await prisma.employee.update({
+    where: { id: employeeId },
+    data: { promotionStatus: round === 1 ? "FIRST_DONE" : "SECOND_DONE" },
+  });
+
+  return toPromotionView(promo, emp.name);
+}
+
+export async function getPromotions(
+  employeeId: string,
+  year?: number,
+): Promise<PromotionView[]> {
+  const where: Record<string, unknown> = { employeeId };
+  if (year) where.year = year;
+
+  const promos = await prisma.leavePromotion.findMany({
+    where,
+    include: { employee: { select: { name: true } } },
+    orderBy: { sentAt: "desc" },
+  });
+
+  return promos.map((p) => toPromotionView(p, p.employee.name));
+}
+
+export async function confirmPromotion(
+  promotionId: string,
+): Promise<PromotionView> {
+  const promo = await prisma.leavePromotion.findUnique({
+    where: { id: promotionId },
+    include: { employee: { select: { name: true } } },
+  });
+  if (!promo) throw new Error("촉진 기록을 찾을 수 없습니다.");
+  if (promo.confirmedAt) throw new Error("이미 확인된 촉진입니다.");
+
+  const updated = await prisma.leavePromotion.update({
+    where: { id: promotionId },
+    data: { confirmedAt: new Date() },
+    include: { employee: { select: { name: true } } },
+  });
+
+  return toPromotionView(updated, updated.employee.name);
+}
+
+export async function resetPromotionStatus(
+  employeeId: string,
+): Promise<void> {
+  await prisma.employee.update({
+    where: { id: employeeId },
+    data: { promotionStatus: "NONE" },
+  });
+}
+
+function toPromotionView(
+  p: { id: string; employeeId: string; year: number; round: number; snapshot: string; adminNote: string | null; sentAt: Date; confirmedAt: Date | null },
+  empName: string,
+): PromotionView {
+  let snapshot: Record<string, unknown> = {};
+  try { snapshot = JSON.parse(p.snapshot); } catch { /* ignore */ }
+  return {
+    id: p.id,
+    employeeId: p.employeeId,
+    employeeName: empName,
+    year: p.year,
+    round: p.round,
+    snapshot,
+    adminNote: p.adminNote,
+    sentAt: p.sentAt.toISOString(),
+    confirmedAt: p.confirmedAt?.toISOString() ?? null,
+  };
 }
