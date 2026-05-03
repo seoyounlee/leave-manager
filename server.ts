@@ -161,6 +161,15 @@ app.patch("/api/employees/:id/reinstate", requireAdmin, async (req, res) => {
   }
 });
 
+app.delete("/api/employees/:id", requireAdmin, async (req, res) => {
+  try {
+    const { deleteEmployee } = await import("./data-handler");
+    res.json(await deleteEmployee(req.params.id as string));
+  } catch (e: unknown) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
 // ─── 연차 기간 시작 ──────────────────────────────────────────────────────────
 
 app.post("/api/leave-years/start", requireAdmin, async (req, res) => {
