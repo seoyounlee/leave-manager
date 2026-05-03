@@ -16,6 +16,8 @@ import {
   resignEmployee,
   reinstateEmployee,
   deleteEmployee,
+  setEmployeeMemo,
+  getEmployeeMemo,
   startLeaveYear,
   grantExtraDays,
   setEmployeePassword,
@@ -125,6 +127,27 @@ app.patch("/api/employees/:id/total", requireAdmin, async (req, res) => {
   }
   try {
     res.json(await updateEmployeeTotal(req.params.id as string, totalDays, year));
+  } catch (e: unknown) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+// ─── 직원 메모 ──────────────────────────────────────────────────────────────
+
+app.get("/api/employees/:id/memo", requireAdmin, async (req, res) => {
+  try {
+    const memo = await getEmployeeMemo(req.params.id as string);
+    res.json({ memo });
+  } catch (e: unknown) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+app.patch("/api/employees/:id/memo", requireAdmin, async (req, res) => {
+  const { memo } = req.body as { memo?: string };
+  try {
+    await setEmployeeMemo(req.params.id as string, memo ?? "");
+    res.json({ ok: true });
   } catch (e: unknown) {
     res.status(400).json({ error: (e as Error).message });
   }

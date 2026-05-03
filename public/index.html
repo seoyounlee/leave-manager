@@ -92,6 +92,27 @@
     </div>
   </div>
 
+  <!-- 달력 -->
+  <div id="calCard" style="display:none" class="animate-fade-up bg-white rounded-2xl shadow-sm p-5">
+    <div class="flex items-center justify-between mb-4">
+      <button onclick="calPrev()" class="px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm transition">&lt;</button>
+      <p class="text-sm font-bold text-gray-700" id="calTitle">2026년 5월</p>
+      <button onclick="calNext()" class="px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm transition">&gt;</button>
+    </div>
+    <div class="grid grid-cols-7 text-center text-xs font-semibold text-gray-400 mb-1">
+      <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+    </div>
+    <div id="calGrid" class="grid grid-cols-7 gap-px"></div>
+    <div class="flex flex-wrap gap-3 mt-3 text-[10px] text-gray-400">
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span>종일</span>
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-orange-400"></span>오전반차</span>
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-purple-400"></span>오후반차</span>
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-teal-500"></span>시간차</span>
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-pink-500"></span>지원대휴</span>
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-yellow-400 border border-yellow-500"></span>대기중</span>
+    </div>
+  </div>
+
   <!-- 연차 신청 폼 -->
   <div id="formCard" style="display:none" class="animate-fade-up bg-white rounded-2xl shadow-sm p-5">
     <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">연차 신청</p>
@@ -204,7 +225,7 @@
     const id = document.getElementById('empSelect').value;
     if (!id) {
       selectedEmpId = null;
-      ['heroCard','formCard','listCard'].forEach(cid => hide(cid));
+      ['heroCard','calCard','formCard','listCard'].forEach(cid => hide(cid));
       return;
     }
     selectEmp(id);
@@ -217,9 +238,9 @@
     showAllYears   = false;
     hide('dateWarn');
     document.getElementById('formMsg').textContent = '';
-    ['heroCard','formCard','listCard'].forEach(cid => show(cid));
+    ['heroCard','calCard','formCard','listCard'].forEach(cid => show(cid));
     const emp = employees.find(e => e.id === id);
-    if (emp) { updateHero(emp, 0); await loadMyRequests(emp); }
+    if (emp) { updateHero(emp, 0); await loadMyRequests(emp); await loadCalData(); }
   }
 
   function updateHero(emp, pendingCount) {
@@ -364,7 +385,7 @@
       ).join('');
 
     const emp = employees.find(e => e.id === selectedEmpId);
-    if (emp) await loadMyRequests(emp);
+    if (emp) { await loadMyRequests(emp); await loadCalData(); }
   }
 
   // ── 날짜 중복 체크 ─────────────────────────────────────────────────────────
@@ -416,6 +437,60 @@
   function showMsg(el, msg, ok) {
     el.textContent = msg;
     el.className   = `text-sm ${ok ? 'text-green-600' : 'text-red-500'}`;
+  }
+
+  // ── 달력 ───────────────────────────────────────────────────────────────────
+  let calYear = new Date().getFullYear();
+  let calMonth = new Date().getMonth(); // 0-based
+  let calRequests = [];
+
+  function calPrev() { calMonth--; if(calMonth<0){calMonth=11;calYear--;} renderCal(); }
+  function calNext() { calMonth++; if(calMonth>11){calMonth=0;calYear++;} renderCal(); }
+
+  async function loadCalData() {
+    if (!selectedEmpId) return;
+    calRequests = await fetch(`${API}/requests?employeeId=${selectedEmpId}`).then(r=>r.json());
+    renderCal();
+  }
+
+  function renderCal() {
+    document.getElementById('calTitle').textContent = `${calYear}년 ${calMonth+1}월`;
+    const grid = document.getElementById('calGrid');
+    const first = new Date(calYear, calMonth, 1);
+    const lastDay = new Date(calYear, calMonth+1, 0).getDate();
+    const startDow = first.getDay();
+    const today = new Date().toISOString().slice(0,10);
+
+    let html = '';
+    // 빈 칸
+    for (let i=0; i<startDow; i++) html += '<div class="h-10"></div>';
+    // 날짜
+    for (let d=1; d<=lastDay; d++) {
+      const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const isToday = dateStr === today;
+      const reqs = calRequests.filter(r => r.date === dateStr && r.status !== 'REJECTED');
+      const dots = reqs.map(r => {
+        const isPending = r.status === 'PENDING';
+        const color = calDotColor(r.type, isPending);
+        return `<span class="w-1.5 h-1.5 rounded-full ${color}" title="${labelType(r.type)}${isPending?' (대기)':''}"></span>`;
+      }).join('');
+      html += `<div class="h-10 flex flex-col items-center justify-center rounded-lg ${isToday?'bg-blue-50 ring-1 ring-blue-300':''} text-xs ${reqs.length?'font-bold':'text-gray-500'} cursor-pointer hover:bg-gray-50 transition" onclick="calClickDate('${dateStr}')">
+        <span>${d}</span>
+        ${dots ? `<div class="flex gap-0.5 mt-0.5">${dots}</div>` : ''}
+      </div>`;
+    }
+    grid.innerHTML = html;
+  }
+
+  function calDotColor(type, isPending) {
+    if (isPending) return 'bg-yellow-400 border border-yellow-500';
+    const m = {FULL:'bg-blue-500',HALF_AM:'bg-orange-400',HALF_PM:'bg-purple-400',TIME_1H:'bg-teal-500',TIME_2H:'bg-teal-500',TIME_3H:'bg-teal-500',SUPPORT_2H:'bg-pink-500'};
+    return m[type] ?? 'bg-gray-400';
+  }
+
+  function calClickDate(dateStr) {
+    document.getElementById('fDate').value = dateStr;
+    checkDateConflict();
   }
 
   document.getElementById('fDate').value = new Date().toISOString().slice(0, 10);

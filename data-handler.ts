@@ -239,6 +239,23 @@ export async function deleteEmployee(
 
 // ─── 직원 비밀번호 ──────────────────────────────────────────────────────────
 
+export async function setEmployeeMemo(
+  employeeId: string,
+  memo: string,
+): Promise<void> {
+  await prisma.employee.update({
+    where: { id: employeeId },
+    data: { memo: memo || null },
+  });
+}
+
+export async function getEmployeeMemo(
+  employeeId: string,
+): Promise<string | null> {
+  const emp = await prisma.employee.findUnique({ where: { id: employeeId }, select: { memo: true } });
+  return emp?.memo ?? null;
+}
+
 export async function setEmployeePassword(
   employeeId: string,
   password: string,
