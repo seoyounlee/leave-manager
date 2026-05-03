@@ -12,6 +12,7 @@ model Employee {
   id         String         @id @default(cuid())
   name       String
   department String         @default("")
+  password   String?
   memo       String?
   joinedAt   DateTime
   status     EmployeeStatus @default(ACTIVE)

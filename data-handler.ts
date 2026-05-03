@@ -36,6 +36,7 @@ export interface EmployeeWithYear {
   usedDays: number;
   remainingDays: number;
   carryOver: number;
+  hasPassword: boolean;
 }
 
 export interface RequestView {
@@ -78,6 +79,7 @@ function toEmployeeView(emp: Employee, ly: LeaveYear | null): EmployeeWithYear {
     usedDays: round1(used),
     remainingDays: round1(Math.max(0, total - used)),
     carryOver: ly?.carryOver ?? 0,
+    hasPassword: !!emp.password,
   };
 }
 
@@ -206,6 +208,30 @@ export async function reinstateEmployee(
   });
 
   return getEmployees(currentYear(), true);
+}
+
+// ─── 직원 비밀번호 ──────────────────────────────────────────────────────────
+
+export async function setEmployeePassword(
+  employeeId: string,
+  password: string,
+): Promise<void> {
+  const emp = await prisma.employee.findUnique({ where: { id: employeeId } });
+  if (!emp) throw new Error("직원을 찾을 수 없습니다.");
+  await prisma.employee.update({
+    where: { id: employeeId },
+    data: { password },
+  });
+}
+
+export async function verifyEmployeePassword(
+  employeeId: string,
+  password: string,
+): Promise<boolean> {
+  const emp = await prisma.employee.findUnique({ where: { id: employeeId } });
+  if (!emp) return false;
+  if (!emp.password) return false; // 비밀번호 미설정
+  return emp.password === password;
 }
 
 // ─── 연차 기간 시작 ─────────────────────────────────────────────────────────
