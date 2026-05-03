@@ -331,6 +331,7 @@
           <div class="flex items-center gap-2 flex-wrap">
             <span class="font-semibold text-sm text-gray-800">${r.date}</span>
             <span class="${typeBadgeCls(r.type)} px-2 py-0.5 rounded-full text-xs font-semibold">${labelType(r.type)}</span>
+            <span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-medium">${r.bucketLabel||r.year+'차'}</span>
           </div>
           <p class="text-xs text-gray-500">${esc(r.reason)}</p>
           ${r.reviewNote ? `<p class="text-xs text-gray-400">${esc(r.reviewNote)}</p>` : ''}

@@ -74,6 +74,7 @@ export interface RequestView {
   type: LeaveType;
   days: number;
   year: number;
+  bucketLabel: string;
   reason: string;
   status: RequestStatus;
   createdAt: string;
@@ -167,6 +168,7 @@ function toRequestView(req: LeaveRequest & { employee: { name: string } }): Requ
     type: req.type as LeaveType,
     days: req.days,
     year: req.year,
+    bucketLabel: `${req.year}차`,
     reason: req.reason,
     status: req.status as RequestStatus,
     createdAt: req.createdAt.toISOString(),
@@ -179,29 +181,72 @@ function toRequestView(req: LeaveRequest & { employee: { name: string } }): Requ
 
 /**
  * 입사일 기준 법정 연차 일수 계산 (근로기준법 제60조)
- * - 1년 미만: 매월 개근 시 1일 (최대 11일) — 입사 후 경과 개월 수
- * - 1년 이상: 15일 + 매 2년마다 1일 가산 (최대 25일)
+ * - 1년 미만: 매월 개근 시 1일 (최대 11일)
+ * - 1년 이상: 15일 기본
+ * - 3년차부터 홀수 해마다(3,5,7,9...) 1일 가산 (최대 25일)
  */
 export function calcLegalLeaveDays(joinedAt: Date, referenceDate: Date = new Date()): number {
   const joinDate = new Date(joinedAt);
   const ref = new Date(referenceDate);
 
-  // 근속 연수 계산
   let years = ref.getFullYear() - joinDate.getFullYear();
   const anniv = new Date(joinDate);
   anniv.setFullYear(ref.getFullYear());
   if (ref < anniv) years--;
 
   if (years < 1) {
-    // 1년 미만: 경과 개월 수 (최대 11일)
     let months = (ref.getFullYear() - joinDate.getFullYear()) * 12 + (ref.getMonth() - joinDate.getMonth());
     if (ref.getDate() < joinDate.getDate()) months--;
     return Math.min(Math.max(0, months), 11);
   }
 
-  // 1년 이상: 15 + floor((years - 1) / 2), 최대 25
-  const extra = Math.floor((years - 1) / 2);
+  // 1년 이상: 15 + 3년차부터 홀수 해마다 +1 (최대 25)
+  let extra = 0;
+  if (years >= 3) extra = Math.floor((years - 1) / 2);
   return Math.min(15 + extra, 25);
+}
+
+/**
+ * 주말 여부 확인
+ */
+function isWeekend(dateStr: string): boolean {
+  const d = new Date(dateStr + "T00:00:00");
+  const dow = d.getDay();
+  return dow === 0 || dow === 6;
+}
+
+/**
+ * 한국 공휴일 (고정일 + 주요 공휴일)
+ */
+const KOREAN_HOLIDAYS: Record<string, string> = {
+  "01-01": "신정",
+  "03-01": "삼일절",
+  "05-05": "어린이날",
+  "06-06": "현충일",
+  "08-15": "광복절",
+  "10-03": "개천절",
+  "10-09": "한글날",
+  "12-25": "크리스마스",
+};
+
+function isHoliday(dateStr: string): string | null {
+  const mmdd = dateStr.slice(5); // MM-DD
+  return KOREAN_HOLIDAYS[mmdd] ?? null;
+}
+
+/**
+ * 연차 날짜 유효성 검사
+ */
+export function validateLeaveDate(dateStr: string): { valid: boolean; error?: string } {
+  if (isWeekend(dateStr)) {
+    const dow = new Date(dateStr + "T00:00:00").getDay();
+    return { valid: false, error: `${dateStr}은(는) ${dow === 0 ? "일" : "토"}요일입니다. 주말에는 연차를 신청할 수 없습니다.` };
+  }
+  const holiday = isHoliday(dateStr);
+  if (holiday) {
+    return { valid: false, error: `${dateStr}은(는) ${holiday}(공휴일)입니다. 공휴일에는 연차를 신청할 수 없습니다.` };
+  }
+  return { valid: true };
 }
 
 /**
@@ -714,6 +759,12 @@ export async function submitRequest(
   const emp = await prisma.employee.findUnique({ where: { id: employeeId } });
   if (!emp) throw new Error("직원을 찾을 수 없습니다.");
   if (emp.status === "RESIGNED") throw new Error("퇴사한 직원은 연차를 신청할 수 없습니다.");
+
+  // 주말/공휴일 검증 (종일/반차만 — 시간차는 허용)
+  if (["FULL", "HALF_AM", "HALF_PM"].includes(fields.type)) {
+    const dateCheck = validateLeaveDate(fields.date);
+    if (!dateCheck.valid) throw new Error(dateCheck.error!);
+  }
 
   // 같은 날짜 중복 체크 (반차는 AM+PM 동시 허용)
   const existingOnDate = await prisma.leaveRequest.findMany({
