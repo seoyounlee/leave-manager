@@ -378,7 +378,10 @@ export async function getEmployees(
   includeResigned = false,
 ): Promise<EmployeeWithYear[]> {
   const y = year ?? currentYear();
-  const where = includeResigned ? {} : { status: "ACTIVE" as const };
+  const where: Record<string, unknown> = {};
+  if (!includeResigned) where.status = "ACTIVE";
+  // 입사 연도 필터: 해당 연도 말일 이전에 입사한 직원만
+  where.joinedAt = { lte: new Date(`${y}-12-31T23:59:59.999Z`) };
 
   const emps = await prisma.employee.findMany({
     where,
