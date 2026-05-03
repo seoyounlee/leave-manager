@@ -189,6 +189,33 @@ app.post("/api/leave-years/start", requireAdmin, async (req, res) => {
   }
 });
 
+app.post("/api/leave-years/grant", requireAdmin, async (req, res) => {
+  const { employeeIds, days, reason, year } = req.body as {
+    employeeIds?: string[] | "all";
+    days?: number;
+    reason?: string;
+    year?: number;
+  };
+  if (!employeeIds) {
+    res.status(400).json({ error: "대상 직원을 선택해주세요." });
+    return;
+  }
+  if (typeof days !== "number" || days <= 0) {
+    res.status(400).json({ error: "부여 일수는 양수여야 합니다." });
+    return;
+  }
+  if (!reason?.trim()) {
+    res.status(400).json({ error: "사유를 입력해주세요." });
+    return;
+  }
+  try {
+    const { grantExtraDays } = await import("./data-handler");
+    res.json(await grantExtraDays(employeeIds, days, reason.trim(), year));
+  } catch (e: unknown) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
 // ─── 연차 신청 ──────────────────────────────────────────────────────────────
 
 app.post("/api/requests", async (req, res) => {

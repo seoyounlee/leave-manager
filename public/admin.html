@@ -48,7 +48,10 @@
   <div class="flex items-center gap-3 bg-white rounded-xl shadow-sm border border-slate-100 px-5 py-3">
     <label class="text-sm font-semibold text-slate-500">연도</label>
     <select id="yearSelect" onchange="onYearChange()" class="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition"></select>
-    <button onclick="showStartYearModal()" class="ml-auto px-4 py-1.5 bg-indigo-500 hover:bg-indigo-600 active:scale-95 text-white text-xs font-semibold rounded-lg transition">새 연차 기간 시작</button>
+    <div class="ml-auto flex gap-2">
+      <button onclick="showGrantModal()" class="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-semibold rounded-lg transition">재량연차 부여</button>
+      <button onclick="showStartYearModal()" class="px-4 py-1.5 bg-indigo-500 hover:bg-indigo-600 active:scale-95 text-white text-xs font-semibold rounded-lg transition">새 연차 기간 시작</button>
+    </div>
   </div>
 
   <!-- 탭 -->
@@ -174,6 +177,37 @@
   </div>
 </div>
 
+<!-- 재량연차 부여 모달 -->
+<div id="grantModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" style="display:none" onclick="if(event.target===this)closeGrantModal()">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-8 flex flex-col gap-5 animate-fade-up">
+    <h2 class="text-lg font-bold text-slate-800">재량연차 부여</h2>
+    <div class="flex flex-col gap-3">
+      <div>
+        <label class="text-xs font-medium text-slate-500 mb-1 block">대상</label>
+        <select id="grantTarget" onchange="onGrantTargetChange()" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition">
+          <option value="all">전체 재직 직원</option>
+        </select>
+      </div>
+      <div id="grantCheckboxArea" style="display:none" class="max-h-40 overflow-y-auto border border-slate-100 rounded-lg p-3 flex flex-col gap-1.5">
+      </div>
+      <div>
+        <label class="text-xs font-medium text-slate-500 mb-1 block">부여 일수</label>
+        <input type="number" id="grantDays" min="0.5" step="0.5" placeholder="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition" />
+      </div>
+      <div>
+        <label class="text-xs font-medium text-slate-500 mb-1 block">사유</label>
+        <input type="text" id="grantReason" placeholder="예: 창립기념일 재량연차" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition" />
+      </div>
+    </div>
+    <p class="text-xs text-slate-400">선택한 직원의 <strong>현재 연도 총 연차</strong>에 부여 일수가 추가됩니다.</p>
+    <div class="flex gap-3">
+      <button onclick="doGrant()" class="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold rounded-xl transition">부여</button>
+      <button onclick="closeGrantModal()" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition">취소</button>
+    </div>
+    <p id="grantMsg" class="text-sm text-center min-h-[18px]"></p>
+  </div>
+</div>
+
 <!-- 직원 상세 모달 -->
 <div id="empModal" class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 overflow-y-auto py-8" style="display:none" onclick="if(event.target===this)closeEmpModal()">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6 flex flex-col gap-5 animate-fade-up">
@@ -199,6 +233,18 @@
         <button onclick="setEmpPassword()" class="px-4 py-2 bg-violet-500 hover:bg-violet-600 active:scale-95 text-white text-xs font-semibold rounded-lg transition">설정</button>
       </div>
       <p id="emPwMsg" class="text-xs mt-1.5 min-h-[16px]"></p>
+    </div>
+
+    <!-- 개별 재량연차 부여 -->
+    <div class="border-t border-slate-100 pt-4">
+      <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">재량연차 부여</p>
+      <div class="flex items-end gap-2">
+        <div class="flex-1"><label class="text-xs text-slate-500 mb-1 block">일수</label><input type="number" id="emGrantDays" min="0.5" step="0.5" placeholder="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition" /></div>
+        <div class="flex-[2]"><label class="text-xs text-slate-500 mb-1 block">사유</label><input type="text" id="emGrantReason" placeholder="사유 입력" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition" /></div>
+        <button onclick="doEmpGrant()" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-semibold rounded-lg transition whitespace-nowrap">부여</button>
+      </div>
+      <p id="emGrantMsg" class="text-xs mt-1.5 min-h-[16px]"></p>
+      <div id="emGrantHistory" class="mt-2 text-xs text-slate-400 whitespace-pre-line"></div>
     </div>
 
     <!-- 관리자 대리 신청 -->
@@ -332,7 +378,13 @@
     document.getElementById('emPwStatus').innerHTML = emp.hasPassword
       ? '<span class="px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold">설정됨</span>'
       : '<span class="px-2 py-0.5 rounded-full bg-red-100 text-red-600 font-semibold">미설정</span>';
+    // 재량연차 부여 초기화
+    document.getElementById('emGrantDays').value = '';
+    document.getElementById('emGrantReason').value = '';
+    document.getElementById('emGrantMsg').textContent = '';
     document.getElementById('empModal').style.display = 'flex';
+    // 재량연차 이력
+    document.getElementById('emGrantHistory').textContent = emp.leaveNote || '';
     // 해당 직원 내역 로드
     const reqs = await fetch(`${API}/requests?employeeId=${id}&year=${selectedYear}`).then(r=>r.json());
     const el = document.getElementById('emReqList');
@@ -433,6 +485,74 @@
     const data=await res.json();if(res.status===401){doLogout();return;}if(!res.ok){alert(`오류: ${data.error}`);return;}
     employees=data;renderEmployees();
     allRequests=await fetch(`${API}/requests?year=${selectedYear}`).then(r=>r.json());renderAll();
+  }
+
+  // ── 재량연차 부여 모달 ──────────────────────────────────────────────────────
+  function showGrantModal() {
+    const sel = document.getElementById('grantTarget');
+    sel.innerHTML = '<option value="all">전체 재직 직원</option><option value="select">직원 선택</option>';
+    document.getElementById('grantCheckboxArea').style.display = 'none';
+    document.getElementById('grantDays').value = '';
+    document.getElementById('grantReason').value = '';
+    document.getElementById('grantMsg').textContent = '';
+    document.getElementById('grantModal').style.display = 'flex';
+  }
+  function closeGrantModal() { document.getElementById('grantModal').style.display = 'none'; }
+  function onGrantTargetChange() {
+    const v = document.getElementById('grantTarget').value;
+    const area = document.getElementById('grantCheckboxArea');
+    if (v === 'select') {
+      const active = employees.filter(e => e.status === 'ACTIVE');
+      area.innerHTML = active.map(e => `<label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" value="${e.id}" class="grant-cb rounded" checked />${esc(e.name)} <span class="text-xs text-slate-400">(${e.department})</span></label>`).join('');
+      area.style.display = 'block';
+    } else {
+      area.style.display = 'none';
+    }
+  }
+  async function doGrant() {
+    const target = document.getElementById('grantTarget').value;
+    const days = parseFloat(document.getElementById('grantDays').value);
+    const reason = document.getElementById('grantReason').value.trim();
+    const msgEl = document.getElementById('grantMsg');
+    if (!days || days <= 0) { msgEl.textContent = '일수를 입력하세요'; msgEl.className = 'text-sm text-red-500 text-center'; return; }
+    if (!reason) { msgEl.textContent = '사유를 입력하세요'; msgEl.className = 'text-sm text-red-500 text-center'; return; }
+    let employeeIds;
+    if (target === 'all') {
+      employeeIds = 'all';
+    } else {
+      employeeIds = [...document.querySelectorAll('.grant-cb:checked')].map(cb => cb.value);
+      if (!employeeIds.length) { msgEl.textContent = '직원을 선택하세요'; msgEl.className = 'text-sm text-red-500 text-center'; return; }
+    }
+    const res = await fetch(`${API}/leave-years/grant`, {
+      method: 'POST', headers: adminHeaders(),
+      body: JSON.stringify({ employeeIds, days, reason, year: selectedYear }),
+    });
+    const data = await res.json();
+    if (!res.ok) { msgEl.textContent = data.error; msgEl.className = 'text-sm text-red-500 text-center'; return; }
+    msgEl.textContent = `${data.granted}명에게 ${days}일 부여 완료${data.skipped ? ` (${data.skipped}명 건너뜀)` : ''}`;
+    msgEl.className = 'text-sm text-green-600 text-center';
+    await loadAll();
+    setTimeout(closeGrantModal, 1500);
+  }
+
+  // ── 개별 재량연차 부여 ────────────────────────────────────────────────────
+  async function doEmpGrant() {
+    const days = parseFloat(document.getElementById('emGrantDays').value);
+    const reason = document.getElementById('emGrantReason').value.trim();
+    const msgEl = document.getElementById('emGrantMsg');
+    if (!days || days <= 0) { msgEl.textContent = '일수를 입력하세요'; msgEl.className = 'text-xs text-red-500 mt-1.5'; return; }
+    if (!reason) { msgEl.textContent = '사유를 입력하세요'; msgEl.className = 'text-xs text-red-500 mt-1.5'; return; }
+    const res = await fetch(`${API}/leave-years/grant`, {
+      method: 'POST', headers: adminHeaders(),
+      body: JSON.stringify({ employeeIds: [modalEmpId], days, reason, year: selectedYear }),
+    });
+    const data = await res.json();
+    if (!res.ok) { msgEl.textContent = data.error; msgEl.className = 'text-xs text-red-500 mt-1.5'; return; }
+    msgEl.textContent = `${days}일 부여 완료!`; msgEl.className = 'text-xs text-green-600 mt-1.5';
+    document.getElementById('emGrantDays').value = '';
+    document.getElementById('emGrantReason').value = '';
+    await loadAll();
+    openEmpModal(modalEmpId); // 모달 새로고침
   }
 
   // ── 새 연차 기간 모달 ─────────────────────────────────────────────────────

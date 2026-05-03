@@ -37,6 +37,7 @@ export interface EmployeeWithYear {
   remainingDays: number;
   carryOver: number;
   hasPassword: boolean;
+  leaveNote: string | null;
 }
 
 export interface RequestView {
@@ -80,6 +81,7 @@ function toEmployeeView(emp: Employee, ly: LeaveYear | null): EmployeeWithYear {
     remainingDays: round1(Math.max(0, total - used)),
     carryOver: ly?.carryOver ?? 0,
     hasPassword: !!emp.password,
+    leaveNote: ly?.note ?? null,
   };
 }
 
@@ -298,6 +300,55 @@ export async function startLeaveYear(
   }
 
   return { created, skipped };
+}
+
+// ─── 재량연차 부여 ──────────────────────────────────────────────────────────
+
+export async function grantExtraDays(
+  employeeIds: string[] | "all",
+  days: number,
+  reason: string,
+  year?: number,
+): Promise<{ granted: number; skipped: number }> {
+  const y = year ?? currentYear();
+  const today = new Date().toISOString().slice(0, 10);
+  const note = `[${today}] 재량연차 +${days}일: ${reason}`;
+
+  let targets: string[];
+  if (employeeIds === "all") {
+    const emps = await prisma.employee.findMany({
+      where: { status: "ACTIVE" },
+      select: { id: true },
+    });
+    targets = emps.map((e) => e.id);
+  } else {
+    targets = employeeIds;
+  }
+
+  let granted = 0;
+  let skipped = 0;
+
+  for (const empId of targets) {
+    const ly = await prisma.leaveYear.findUnique({
+      where: { employeeId_year: { employeeId: empId, year: y } },
+    });
+    if (!ly) {
+      skipped++;
+      continue;
+    }
+
+    const prevNote = ly.note ? ly.note + "\n" : "";
+    await prisma.leaveYear.update({
+      where: { id: ly.id },
+      data: {
+        totalDays: round1(ly.totalDays + days),
+        note: prevNote + note,
+      },
+    });
+    granted++;
+  }
+
+  return { granted, skipped };
 }
 
 // ─── 연도 목록 ──────────────────────────────────────────────────────────────
