@@ -166,13 +166,18 @@ app.post("/api/leave-years/start", requireAdmin, async (req, res) => {
 // ─── 연차 신청 ──────────────────────────────────────────────────────────────
 
 app.post("/api/requests", async (req, res) => {
-  const { employeeId, date, type, reason } = req.body as {
+  const { employeeId, date, type, reason, password } = req.body as {
     employeeId?: string;
     date?: string;
     type?: string;
     reason?: string;
+    password?: string;
   };
 
+  if (!password || password !== ADMIN_PASSWORD) {
+    res.status(401).json({ error: "비밀번호가 올바르지 않습니다." });
+    return;
+  }
   if (!employeeId) {
     res.status(400).json({ error: "employeeId는 필수입니다." });
     return;

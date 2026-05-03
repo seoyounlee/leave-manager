@@ -28,16 +28,20 @@
 
   <!-- 헤더 -->
   <div class="text-center">
-    <h1 class="text-2xl font-bold text-gray-900">🌿 내 연차 확인</h1>
-    <p class="text-sm text-gray-400 mt-1">이름을 선택하면 잔여 연차를 바로 확인할 수 있어요.</p>
+    <h1 class="text-2xl font-bold text-gray-900">🌿 내 연차 확인 · 신청</h1>
+    <p class="text-sm text-gray-400 mt-1">이름을 선택하면 잔여 연차를 확인하고 신청할 수 있어요.</p>
   </div>
 
-  <!-- 직원 선택 -->
+  <!-- 직원 선택 (드롭다운) -->
   <div class="bg-white rounded-2xl shadow-sm p-5">
-    <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">직원 선택</p>
-    <div id="empGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-      <div class="col-span-2 sm:col-span-3 text-sm text-gray-300 py-2">로딩 중…</div>
-    </div>
+    <label class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 block">직원 선택</label>
+    <select id="empSelect" onchange="onSelectEmp()"
+      class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-base bg-gray-50
+             focus:outline-none focus:border-blue-500 focus:bg-white transition
+             appearance-none cursor-pointer"
+      style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%239ca3af%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><polyline points=%226 9 12 15 18 9%22/></svg>'); background-repeat: no-repeat; background-position: right 12px center;">
+      <option value="">-- 이름을 선택하세요 --</option>
+    </select>
   </div>
 
   <!-- 잔여 연차 히어로 -->
@@ -103,7 +107,7 @@
         <input type="date" id="fDate" oninput="checkDateConflict()"
           class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition" />
         <div id="dateWarn" style="display:none" class="mt-2 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
-          ⚠️ <span id="dateWarnText"></span>
+          <span id="dateWarnText"></span>
         </div>
       </div>
       <div>
@@ -115,13 +119,18 @@
           <option value="HALF_PM">오후반차 (0.5일)</option>
         </select>
         <div id="dayChip" class="mt-2 inline-flex items-center gap-1.5 bg-green-100 text-green-800 rounded-full px-3 py-1 text-xs font-bold">
-          ✂️ <span id="dayChipText">1일 차감</span>
+          <span id="dayChipText">1일 차감</span>
         </div>
       </div>
       <div class="sm:col-span-2">
         <label class="block text-xs font-semibold text-gray-500 mb-1.5">사유</label>
         <textarea id="fReason" rows="3" placeholder="사유를 입력하세요"
           class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition resize-none"></textarea>
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block text-xs font-semibold text-gray-500 mb-1.5">비밀번호</label>
+        <input type="password" id="fPassword" placeholder="비밀번호를 입력하세요"
+          class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition tracking-widest" />
       </div>
     </div>
 
@@ -130,7 +139,7 @@
         class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-sm rounded-xl transition-all">
         신청하기
       </button>
-      <span id="formMsg" class="text-sm hidden"></span>
+      <span id="formMsg" class="text-sm"></span>
     </div>
   </div>
 
@@ -145,7 +154,7 @@
     </div>
 
     <div id="reqMobile" class="flex flex-col gap-3 sm:hidden"></div>
-    <div class="hidden sm:block overflow-x-auto">
+    <div class="sm:block overflow-x-auto" style="display:none" id="reqDesktop">
       <table class="w-full text-sm">
         <thead>
           <tr class="border-b-2 border-gray-100">
@@ -177,45 +186,33 @@
     return pct > .5 ? '#4ade80' : pct > .2 ? '#facc15' : '#f87171';
   }
 
-  // ── 직원 목록 (ACTIVE만) ──────────────────────────────────────────────────
+  // ── 직원 목록 로드 → 드롭다운 ─────────────────────────────────────────────
   async function loadEmployees() {
     employees = await fetch(`${API}/employees`).then(r => r.json());
-    renderGrid();
+    const sel = document.getElementById('empSelect');
+    sel.innerHTML = '<option value="">-- 이름을 선택하세요 --</option>' +
+      employees.map(e =>
+        `<option value="${e.id}">${e.name} (잔여 ${e.remainingDays}일)</option>`
+      ).join('');
   }
 
-  function renderGrid() {
-    const grid = document.getElementById('empGrid');
-    if (!employees.length) {
-      grid.innerHTML = '<p class="col-span-2 sm:col-span-3 text-sm text-gray-300">등록된 직원이 없습니다.</p>';
+  function onSelectEmp() {
+    const id = document.getElementById('empSelect').value;
+    if (!id) {
+      selectedEmpId = null;
+      ['heroCard','formCard','listCard'].forEach(cid => hide(cid));
       return;
     }
-    grid.innerHTML = employees.map(e => {
-      const pct      = e.totalDays > 0 ? e.remainingDays / e.totalDays : 0;
-      const chipCls  = pct > .5 ? 'bg-green-100 text-green-700'
-                     : pct > .2 ? 'bg-yellow-100 text-yellow-700'
-                     :            'bg-red-100 text-red-700';
-      const isActive = e.id === selectedEmpId;
-      return `
-        <button onclick="selectEmp('${e.id}')"
-          class="flex flex-col items-center py-4 px-2 rounded-xl border-2 text-center transition-all
-                 ${isActive
-                   ? 'border-blue-500 bg-blue-50 text-blue-700'
-                   : 'border-gray-100 bg-gray-50 text-gray-700 hover:border-blue-300 hover:bg-blue-50'}">
-          <span class="font-bold text-sm">${esc(e.name)}</span>
-          <span class="mt-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${isActive ? 'bg-blue-100 text-blue-700' : chipCls}">
-            잔여 ${e.remainingDays}일
-          </span>
-        </button>`;
-    }).join('');
+    selectEmp(id);
   }
 
-  // ── 직원 선택 ───────────────────────────────────────────────────────────
+  // ── 직원 선택 ─────────────────────────────────────────────────────────────
   async function selectEmp(id) {
     selectedEmpId  = id;
     myRequestCache = [];
     showAllYears   = false;
     hide('dateWarn');
-    renderGrid();
+    document.getElementById('formMsg').textContent = '';
     ['heroCard','formCard','listCard'].forEach(cid => show(cid));
     const emp = employees.find(e => e.id === id);
     if (emp) { updateHero(emp, 0); await loadMyRequests(emp); }
@@ -245,7 +242,7 @@
       `총 <strong>${emp.totalDays}일</strong> 중 <strong>${emp.usedDays}일</strong> 승인 사용 (${usedPct}%)`;
 
     if (pendingCount > 0) {
-      document.getElementById('pendingBadgeText').textContent = `대기중 신청 ${pendingCount}건 · 승인 시 추가 차감`;
+      document.getElementById('pendingBadgeText').textContent = `대기중 신청 ${pendingCount}건`;
       show('pendingBadge');
     } else {
       hide('pendingBadge');
@@ -267,7 +264,7 @@
     requestAnimationFrame(step);
   }
 
-  // ── 신청 내역 로드 ───────────────────────────────────────────────────────
+  // ── 신청 내역 로드 ─────────────────────────────────────────────────────────
   async function loadMyRequests(emp) {
     const yearParam = showAllYears ? '' : `&year=${new Date().getFullYear()}`;
     const list = await fetch(`${API}/requests?employeeId=${emp.id}${yearParam}`).then(r => r.json());
@@ -276,19 +273,22 @@
     const pendingCount = list.filter(r => r.status === 'PENDING').length;
     updateHero(emp, pendingCount);
 
-    // 전체 연도 보기 버튼
     const btn = document.getElementById('showAllBtn');
-    btn.style.display = showAllYears ? 'none' : '';
-    btn.textContent = '전체 연도 보기';
+    btn.style.display = showAllYears ? 'none' : 'block';
 
-    const mobile = document.getElementById('reqMobile');
-    const tbody  = document.getElementById('reqBody');
+    const mobile  = document.getElementById('reqMobile');
+    const desktop = document.getElementById('reqDesktop');
+    const tbody   = document.getElementById('reqBody');
 
     if (!list.length) {
-      mobile.innerHTML = `<p class="text-sm text-gray-300 text-center py-4">신청 내역이 없습니다.</p>`;
-      tbody.innerHTML  = `<tr><td colspan="5" class="text-center text-gray-300 py-6 text-sm">신청 내역이 없습니다.</td></tr>`;
+      mobile.innerHTML  = `<p class="text-sm text-gray-300 text-center py-4">신청 내역이 없습니다.</p>`;
+      tbody.innerHTML   = `<tr><td colspan="5" class="text-center text-gray-300 py-6 text-sm">신청 내역이 없습니다.</td></tr>`;
+      desktop.style.display = 'none';
       return;
     }
+
+    // 데스크톱 테이블 보이기
+    if (window.innerWidth >= 640) desktop.style.display = 'block';
 
     mobile.innerHTML = list.map(r => `
       <div class="border border-gray-100 rounded-xl p-4 flex items-start justify-between gap-3">
@@ -321,37 +321,46 @@
     if (emp) loadMyRequests(emp);
   }
 
-  // ── 연차 신청 ───────────────────────────────────────────────────────────
+  // ── 연차 신청 (비밀번호 필수) ──────────────────────────────────────────────
   async function submitRequest() {
-    const date   = document.getElementById('fDate').value;
-    const type   = document.getElementById('fType').value;
-    const reason = document.getElementById('fReason').value.trim();
-    const msgEl  = document.getElementById('formMsg');
+    const date     = document.getElementById('fDate').value;
+    const type     = document.getElementById('fType').value;
+    const reason   = document.getElementById('fReason').value.trim();
+    const password = document.getElementById('fPassword').value;
+    const msgEl    = document.getElementById('formMsg');
 
-    if (!date)   { showMsg(msgEl, '날짜를 선택해주세요.', false); return; }
-    if (!reason) { showMsg(msgEl, '사유를 입력해주세요.', false); return; }
+    if (!date)     { showMsg(msgEl, '날짜를 선택해주세요.', false); return; }
+    if (!reason)   { showMsg(msgEl, '사유를 입력해주세요.', false); return; }
+    if (!password) { showMsg(msgEl, '비밀번호를 입력해주세요.', false); return; }
 
     const res = await fetch(`${API}/requests`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employeeId: selectedEmpId, date, type, reason }),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employeeId: selectedEmpId, date, type, reason, password }),
     });
     const data = await res.json();
     if (!res.ok) { showMsg(msgEl, data.error, false); return; }
 
-    showMsg(msgEl, '신청 완료. 관리자 승인 후 연차가 차감됩니다.', true);
+    showMsg(msgEl, '신청 완료! 관리자 승인 후 연차가 차감됩니다.', true);
     document.getElementById('fReason').value = '';
     hide('dateWarn');
     myRequestCache = [];
     employees = await fetch(`${API}/employees`).then(r => r.json());
-    renderGrid();
+
+    // 드롭다운 옵션 갱신
+    const sel = document.getElementById('empSelect');
+    sel.innerHTML = '<option value="">-- 이름을 선택하세요 --</option>' +
+      employees.map(e =>
+        `<option value="${e.id}" ${e.id === selectedEmpId ? 'selected' : ''}>${e.name} (잔여 ${e.remainingDays}일)</option>`
+      ).join('');
+
     const emp = employees.find(e => e.id === selectedEmpId);
     if (emp) await loadMyRequests(emp);
   }
 
-  // ── 날짜 중복 체크 ───────────────────────────────────────────────────────
+  // ── 날짜 중복 체크 ─────────────────────────────────────────────────────────
   async function checkDateConflict() {
-    const date   = document.getElementById('fDate').value;
-    const warnEl = document.getElementById('dateWarn');
+    const date = document.getElementById('fDate').value;
     hide('dateWarn');
     if (!date || !selectedEmpId) return;
     if (!myRequestCache.length) {
@@ -360,7 +369,7 @@
     const c = myRequestCache.find(r => r.date === date && (r.status === 'PENDING' || r.status === 'APPROVED'));
     if (c) {
       document.getElementById('dateWarnText').textContent =
-        `이미 신청된 날짜입니다. (현재 상태: ${{ PENDING:'대기중', APPROVED:'승인됨' }[c.status] ?? c.status})`;
+        `이미 신청된 날짜입니다. (${{'PENDING':'대기중','APPROVED':'승인됨'}[c.status] ?? c.status})`;
       show('dateWarn');
     }
   }
@@ -373,7 +382,7 @@
       ${half ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`;
   }
 
-  // ── 유틸 ─────────────────────────────────────────────────────────────────
+  // ── 유틸 ───────────────────────────────────────────────────────────────────
   function show(id) { document.getElementById(id).style.display = 'block'; }
   function hide(id) { document.getElementById(id).style.display = 'none'; }
   function esc(s)   { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -388,7 +397,6 @@
   function showMsg(el, msg, ok) {
     el.textContent = msg;
     el.className   = `text-sm ${ok ? 'text-green-600' : 'text-red-500'}`;
-    el.classList.remove('hidden');
   }
 
   document.getElementById('fDate').value = new Date().toISOString().slice(0, 10);
