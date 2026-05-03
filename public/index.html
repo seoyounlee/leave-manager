@@ -339,7 +339,12 @@
       body: JSON.stringify({ employeeId: selectedEmpId, date, type, reason, password }),
     });
     const data = await res.json();
-    if (!res.ok) { showMsg(msgEl, data.error, false); return; }
+    if (!res.ok) {
+      const msg = data.error === '비밀번호가 올바르지 않습니다.'
+        ? '비밀번호가 올바르지 않습니다. (미설정 시 관리자에게 문의하세요)'
+        : data.error;
+      showMsg(msgEl, msg, false); return;
+    }
 
     showMsg(msgEl, '신청 완료! 관리자 승인 후 연차가 차감됩니다.', true);
     document.getElementById('fReason').value = '';
@@ -366,11 +371,20 @@
     if (!myRequestCache.length) {
       myRequestCache = await fetch(`${API}/requests?employeeId=${selectedEmpId}`).then(r => r.json());
     }
-    const c = myRequestCache.find(r => r.date === date && (r.status === 'PENDING' || r.status === 'APPROVED'));
-    if (c) {
-      document.getElementById('dateWarnText').textContent =
-        `이미 신청된 날짜입니다. (${{'PENDING':'대기중','APPROVED':'승인됨'}[c.status] ?? c.status})`;
-      show('dateWarn');
+    const type = document.getElementById('fType').value;
+    const existing = myRequestCache.filter(r => r.date === date && (r.status === 'PENDING' || r.status === 'APPROVED'));
+    if (existing.length) {
+      const hasFull = existing.some(r => r.type === 'FULL');
+      const hasAM = existing.some(r => r.type === 'HALF_AM');
+      const hasPM = existing.some(r => r.type === 'HALF_PM');
+      let warn = '';
+      if (hasFull || type === 'FULL') warn = '이미 신청된 날짜입니다.';
+      else if (type === 'HALF_AM' && hasAM) warn = '이미 오전반차가 신청되어 있습니다.';
+      else if (type === 'HALF_PM' && hasPM) warn = '이미 오후반차가 신청되어 있습니다.';
+      if (warn) {
+        document.getElementById('dateWarnText').textContent = warn;
+        show('dateWarn');
+      }
     }
   }
 

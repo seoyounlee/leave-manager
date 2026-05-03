@@ -15,7 +15,11 @@ import {
   cancelApproved,
   resignEmployee,
   reinstateEmployee,
+  deleteEmployee,
   startLeaveYear,
+  grantExtraDays,
+  setEmployeePassword,
+  verifyEmployeePassword,
   LEAVE_TYPE_KO,
   STATUS_KO,
   LeaveType,
@@ -135,7 +139,6 @@ app.patch("/api/employees/:id/password", requireAdmin, async (req, res) => {
     return;
   }
   try {
-    const { setEmployeePassword } = await import("./data-handler");
     await setEmployeePassword(req.params.id as string, password.trim());
     res.json({ ok: true });
   } catch (e: unknown) {
@@ -163,7 +166,6 @@ app.patch("/api/employees/:id/reinstate", requireAdmin, async (req, res) => {
 
 app.delete("/api/employees/:id", requireAdmin, async (req, res) => {
   try {
-    const { deleteEmployee } = await import("./data-handler");
     res.json(await deleteEmployee(req.params.id as string));
   } catch (e: unknown) {
     res.status(400).json({ error: (e as Error).message });
@@ -209,7 +211,6 @@ app.post("/api/leave-years/grant", requireAdmin, async (req, res) => {
     return;
   }
   try {
-    const { grantExtraDays } = await import("./data-handler");
     res.json(await grantExtraDays(employeeIds, days, reason.trim(), year));
   } catch (e: unknown) {
     res.status(400).json({ error: (e as Error).message });
@@ -250,7 +251,6 @@ app.post("/api/requests", async (req, res) => {
 
   try {
     // 비밀번호 검증: 관리자 비밀번호 또는 해당 직원 비밀번호
-    const { verifyEmployeePassword } = await import("./data-handler");
     if (password !== ADMIN_PASSWORD) {
       const valid = await verifyEmployeePassword(employeeId, password);
       if (!valid) {

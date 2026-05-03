@@ -49,7 +49,7 @@ model LeaveRequest {
   date       String
   type       LeaveType
   days       Float     @default(1)
-  year       Int       @default(2025)
+  year       Int
   reason     String
   status     Status    @default(PENDING)
   reviewNote String?

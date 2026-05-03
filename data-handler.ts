@@ -390,18 +390,28 @@ export async function submitRequest(
   if (!emp) throw new Error("직원을 찾을 수 없습니다.");
   if (emp.status === "RESIGNED") throw new Error("퇴사한 직원은 연차를 신청할 수 없습니다.");
 
-  // 같은 날짜 중복 체크
-  const dup = await prisma.leaveRequest.findFirst({
+  // 같은 날짜 중복 체크 (반차는 AM+PM 동시 허용)
+  const existingOnDate = await prisma.leaveRequest.findMany({
     where: {
       employeeId,
       date: fields.date,
       status: { in: ["PENDING", "APPROVED"] },
     },
   });
-  if (dup) {
-    throw new Error(
-      `${fields.date}에 이미 ${STATUS_KO[dup.status as RequestStatus]} 상태의 신청이 있습니다.`,
-    );
+  if (existingOnDate.length) {
+    const hasFullDay = existingOnDate.some((r) => r.type === "FULL");
+    const hasAM = existingOnDate.some((r) => r.type === "HALF_AM");
+    const hasPM = existingOnDate.some((r) => r.type === "HALF_PM");
+
+    if (hasFullDay || fields.type === "FULL") {
+      throw new Error(`${fields.date}에 이미 신청이 있습니다.`);
+    }
+    if (fields.type === "HALF_AM" && hasAM) {
+      throw new Error(`${fields.date}에 이미 오전반차 신청이 있습니다.`);
+    }
+    if (fields.type === "HALF_PM" && hasPM) {
+      throw new Error(`${fields.date}에 이미 오후반차 신청이 있습니다.`);
+    }
   }
 
   const y = currentYear();
@@ -454,7 +464,8 @@ export async function approveRequest(
     }),
   ]);
 
-  return { employees: await getEmployees(), requests: await getRequests() };
+  const y = req.year;
+  return { employees: await getEmployees(y), requests: await getRequests({ year: y }) };
 }
 
 // ─── 반려 ──────────────────────────────────────────────────────────────────
@@ -474,7 +485,8 @@ export async function rejectRequest(
     data: { status: "REJECTED", reviewedAt: new Date(), reviewNote: note ?? null },
   });
 
-  return { employees: await getEmployees(), requests: await getRequests() };
+  const y = req.year;
+  return { employees: await getEmployees(y), requests: await getRequests({ year: y }) };
 }
 
 // ─── 승인 취소 ──────────────────────────────────────────────────────────────
@@ -510,5 +522,6 @@ export async function cancelApproved(
     });
   }
 
-  return { employees: await getEmployees(), requests: await getRequests() };
+  const y = req.year;
+  return { employees: await getEmployees(y), requests: await getRequests({ year: y }) };
 }
