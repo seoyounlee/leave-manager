@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Employee {
+  id         String         @id @default(cuid())
+  name       String
+  department String         @default("")
+  memo       String?
+  joinedAt   DateTime
+  status     EmployeeStatus @default(ACTIVE)
+  resignedAt DateTime?
+  createdAt  DateTime       @default(now())
+  totalDays  Float          @default(0)
+  leaveYears LeaveYear[]
+  requests   LeaveRequest[]
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  RESIGNED
+}
+
+model LeaveYear {
+  id         String   @id @default(cuid())
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  employeeId String
+  year       Int
+  totalDays  Float
+  usedDays   Float    @default(0)
+  carryOver  Float    @default(0)
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@unique([employeeId, year])
+}
+
+model LeaveRequest {
+  id         String    @id @default(cuid())
+  employee   Employee  @relation(fields: [employeeId], references: [id])
+  employeeId String
+  date       String
+  type       LeaveType
+  days       Float     @default(1)
+  year       Int       @default(2025)
+  reason     String
+  status     Status    @default(PENDING)
+  reviewNote String?
+  createdAt  DateTime  @default(now())
+  reviewedAt DateTime?
+}
+
+enum LeaveType {
+  FULL
+  HALF_AM
+  HALF_PM
+}
+
+enum Status {
+  PENDING
+  APPROVED
+  REJECTED
+}

@@ -17,7 +17,6 @@
     }
   </script>
   <style>
-    /* SVG ring transition */
     #ringFill { transition: stroke-dashoffset .7s cubic-bezier(.4,0,.2,1), stroke .4s; }
     .blink-dot { animation: blink 1.4s ease-in-out infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
@@ -33,7 +32,7 @@
     <p class="text-sm text-gray-400 mt-1">이름을 선택하면 잔여 연차를 바로 확인할 수 있어요.</p>
   </div>
 
-  <!-- ① 직원 선택 -->
+  <!-- 직원 선택 -->
   <div class="bg-white rounded-2xl shadow-sm p-5">
     <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">직원 선택</p>
     <div id="empGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -41,15 +40,13 @@
     </div>
   </div>
 
-  <!-- ② 잔여 연차 히어로 -->
+  <!-- 잔여 연차 히어로 -->
   <div id="heroCard" class="hidden animate-fade-up bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 rounded-2xl shadow-xl p-6 text-white overflow-hidden relative">
-    <!-- 배경 데코 -->
     <span class="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-white/5 pointer-events-none"></span>
     <span class="absolute -bottom-8 -left-8 w-36 h-36 rounded-full bg-white/5 pointer-events-none"></span>
 
     <p class="text-sm text-blue-200 font-semibold text-center mb-5" id="heroName">—</p>
 
-    <!-- SVG 링 -->
     <div class="flex justify-center mb-5">
       <div class="relative w-40 h-40">
         <svg viewBox="0 0 168 168" class="w-full h-full">
@@ -66,10 +63,8 @@
       </div>
     </div>
 
-    <!-- 요약 -->
     <p class="text-sm text-blue-100 text-center mb-1" id="heroSummary"></p>
 
-    <!-- 대기중 뱃지 -->
     <div id="pendingBadge" style="display:none" class="flex justify-center mt-2">
       <span class="inline-flex items-center gap-2 bg-white/10 rounded-full px-4 py-1.5 text-xs">
         <span class="blink-dot w-2 h-2 rounded-full bg-yellow-300 flex-shrink-0"></span>
@@ -77,7 +72,6 @@
       </span>
     </div>
 
-    <!-- 세부 수치 -->
     <div class="grid grid-cols-3 gap-px mt-6 pt-5 border-t border-white/15">
       <div class="text-center">
         <p class="text-[11px] text-blue-300 mb-1">총 연차</p>
@@ -94,43 +88,36 @@
     </div>
   </div>
 
-  <!-- ③ 연차 신청 폼 -->
+  <!-- 연차 신청 폼 -->
   <div id="formCard" class="hidden animate-fade-up bg-white rounded-2xl shadow-sm p-5">
     <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">연차 신청</p>
 
-    <!-- 안내 -->
     <div class="flex items-start gap-2.5 bg-blue-50 border border-blue-100 rounded-xl p-3.5 mb-5 text-sm text-blue-700">
       <span class="text-base flex-shrink-0">ℹ️</span>
-      <span>신청 후 <strong>관리자가 승인</strong>해야 연차가 차감됩니다. 신청 직후 잔여 연차는 변하지 않습니다.</span>
+      <span>신청 후 <strong>관리자가 승인</strong>해야 연차가 차감됩니다.</span>
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <!-- 날짜 -->
       <div>
         <label class="block text-xs font-semibold text-gray-500 mb-1.5">날짜</label>
         <input type="date" id="fDate" oninput="checkDateConflict()"
           class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition" />
-        <!-- 중복 경고 -->
         <div id="dateWarn" style="display:none" class="mt-2 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
           ⚠️ <span id="dateWarnText"></span>
         </div>
       </div>
-
-      <!-- 종류 -->
       <div>
         <label class="block text-xs font-semibold text-gray-500 mb-1.5">종류</label>
         <select id="fType" onchange="updateDayChip()"
           class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
-          <option value="full">종일 (1일)</option>
-          <option value="half-am">오전반차 (0.5일)</option>
-          <option value="half-pm">오후반차 (0.5일)</option>
+          <option value="FULL">종일 (1일)</option>
+          <option value="HALF_AM">오전반차 (0.5일)</option>
+          <option value="HALF_PM">오후반차 (0.5일)</option>
         </select>
         <div id="dayChip" class="mt-2 inline-flex items-center gap-1.5 bg-green-100 text-green-800 rounded-full px-3 py-1 text-xs font-bold">
           ✂️ <span id="dayChipText">1일 차감</span>
         </div>
       </div>
-
-      <!-- 사유 -->
       <div class="sm:col-span-2">
         <label class="block text-xs font-semibold text-gray-500 mb-1.5">사유</label>
         <textarea id="fReason" rows="3" placeholder="사유를 입력하세요"
@@ -147,11 +134,16 @@
     </div>
   </div>
 
-  <!-- ④ 내 신청 내역 -->
+  <!-- 내 신청 내역 -->
   <div id="listCard" class="hidden animate-fade-up bg-white rounded-2xl shadow-sm p-5">
-    <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">내 신청 내역</p>
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">내 신청 내역</p>
+      <button id="showAllBtn" onclick="toggleShowAllYears()" style="display:none"
+              class="text-xs text-blue-500 hover:text-blue-700 font-semibold transition">
+        전체 연도 보기
+      </button>
+    </div>
 
-    <!-- 모바일: 카드 목록 / 데스크톱: 테이블 -->
     <div id="reqMobile" class="flex flex-col gap-3 sm:hidden"></div>
     <div class="hidden sm:block overflow-x-auto">
       <table class="w-full text-sm">
@@ -179,13 +171,13 @@
   let selectedEmpId   = null;
   let employees       = [];
   let myRequestCache  = [];
+  let showAllYears    = false;
 
-  // ── 색상 ────────────────────────────────────────────────────────────────────
   function ringColor(pct) {
     return pct > .5 ? '#4ade80' : pct > .2 ? '#facc15' : '#f87171';
   }
 
-  // ── 직원 목록 로드 ───────────────────────────────────────────────────────────
+  // ── 직원 목록 (ACTIVE만) ──────────────────────────────────────────────────
   async function loadEmployees() {
     employees = await fetch(`${API}/employees`).then(r => r.json());
     renderGrid();
@@ -217,10 +209,11 @@
     }).join('');
   }
 
-  // ── 직원 선택 ───────────────────────────────────────────────────────────────
+  // ── 직원 선택 ───────────────────────────────────────────────────────────
   async function selectEmp(id) {
     selectedEmpId  = id;
     myRequestCache = [];
+    showAllYears   = false;
     hide('dateWarn');
     renderGrid();
     ['heroCard','formCard','listCard'].forEach(cid => show(cid));
@@ -232,9 +225,8 @@
     const pct   = emp.totalDays > 0 ? emp.remainingDays / emp.totalDays : 0;
     const color = ringColor(pct);
 
-    document.getElementById('heroName').textContent = `${emp.name}님의 잔여 연차`;
+    document.getElementById('heroName').textContent = `${emp.name}님의 ${emp.year}년 잔여 연차`;
 
-    // 링
     const fill = document.getElementById('ringFill');
     fill.style.stroke           = color;
     fill.style.strokeDashoffset = CIRC;
@@ -244,11 +236,11 @@
 
     countUp('ringDays', emp.remainingDays, color);
 
-    document.getElementById('sTot').textContent  = emp.totalDays  + '일';
-    document.getElementById('sUsed').textContent = emp.usedDays   + '일';
+    document.getElementById('sTot').textContent  = emp.totalDays + '일';
+    document.getElementById('sUsed').textContent = emp.usedDays + '일';
     document.getElementById('sRem').textContent  = emp.remainingDays + '일';
 
-    const usedPct = Math.round((emp.usedDays / emp.totalDays) * 100);
+    const usedPct = emp.totalDays > 0 ? Math.round((emp.usedDays / emp.totalDays) * 100) : 0;
     document.getElementById('heroSummary').innerHTML =
       `총 <strong>${emp.totalDays}일</strong> 중 <strong>${emp.usedDays}일</strong> 승인 사용 (${usedPct}%)`;
 
@@ -275,15 +267,21 @@
     requestAnimationFrame(step);
   }
 
-  // ── 신청 내역 로드 ───────────────────────────────────────────────────────────
+  // ── 신청 내역 로드 ───────────────────────────────────────────────────────
   async function loadMyRequests(emp) {
-    const list = await fetch(`${API}/requests?employeeId=${emp.id}`).then(r => r.json());
+    const yearParam = showAllYears ? '' : `&year=${new Date().getFullYear()}`;
+    const list = await fetch(`${API}/requests?employeeId=${emp.id}${yearParam}`).then(r => r.json());
     myRequestCache = list;
-    updateHero(emp, list.filter(r => r.status === 'pending').length);
 
-    // 모바일 카드
+    const pendingCount = list.filter(r => r.status === 'PENDING').length;
+    updateHero(emp, pendingCount);
+
+    // 전체 연도 보기 버튼
+    const btn = document.getElementById('showAllBtn');
+    btn.style.display = showAllYears ? 'none' : '';
+    btn.textContent = '전체 연도 보기';
+
     const mobile = document.getElementById('reqMobile');
-    // 데스크톱 테이블
     const tbody  = document.getElementById('reqBody');
 
     if (!list.length) {
@@ -317,7 +315,13 @@
     `).join('');
   }
 
-  // ── 연차 신청 ───────────────────────────────────────────────────────────────
+  function toggleShowAllYears() {
+    showAllYears = true;
+    const emp = employees.find(e => e.id === selectedEmpId);
+    if (emp) loadMyRequests(emp);
+  }
+
+  // ── 연차 신청 ───────────────────────────────────────────────────────────
   async function submitRequest() {
     const date   = document.getElementById('fDate').value;
     const type   = document.getElementById('fType').value;
@@ -334,7 +338,7 @@
     const data = await res.json();
     if (!res.ok) { showMsg(msgEl, data.error, false); return; }
 
-    showMsg(msgEl, '✅ 신청 완료. 관리자 승인 후 연차가 차감됩니다.', true);
+    showMsg(msgEl, '신청 완료. 관리자 승인 후 연차가 차감됩니다.', true);
     document.getElementById('fReason').value = '';
     hide('dateWarn');
     myRequestCache = [];
@@ -344,7 +348,7 @@
     if (emp) await loadMyRequests(emp);
   }
 
-  // ── 날짜 중복 체크 ───────────────────────────────────────────────────────────
+  // ── 날짜 중복 체크 ───────────────────────────────────────────────────────
   async function checkDateConflict() {
     const date   = document.getElementById('fDate').value;
     const warnEl = document.getElementById('dateWarn');
@@ -353,38 +357,34 @@
     if (!myRequestCache.length) {
       myRequestCache = await fetch(`${API}/requests?employeeId=${selectedEmpId}`).then(r => r.json());
     }
-    const c = myRequestCache.find(r => r.date === date && (r.status === 'pending' || r.status === 'approved'));
+    const c = myRequestCache.find(r => r.date === date && (r.status === 'PENDING' || r.status === 'APPROVED'));
     if (c) {
       document.getElementById('dateWarnText').textContent =
-        `이미 신청된 날짜입니다. (현재 상태: ${{ pending:'대기중', approved:'승인됨' }[c.status] ?? c.status})`;
+        `이미 신청된 날짜입니다. (현재 상태: ${{ PENDING:'대기중', APPROVED:'승인됨' }[c.status] ?? c.status})`;
       show('dateWarn');
     }
   }
 
-  // ── 반차 칩 ─────────────────────────────────────────────────────────────────
   function updateDayChip() {
     const type = document.getElementById('fType').value;
-    const half = type !== 'full';
-    const chip = document.getElementById('dayChip');
+    const half = type !== 'FULL';
     document.getElementById('dayChipText').textContent = half ? '0.5일 차감' : '1일 차감';
-    chip.className = `mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold
+    document.getElementById('dayChip').className = `mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold
       ${half ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`;
   }
 
-  // ── 유틸 ────────────────────────────────────────────────────────────────────
-  function show(id)  { document.getElementById(id).style.display = ''; }
-  function hide(id)  { document.getElementById(id).style.display = 'none'; }
+  // ── 유틸 ─────────────────────────────────────────────────────────────────
+  function show(id) { document.getElementById(id).style.display = ''; }
+  function hide(id) { document.getElementById(id).style.display = 'none'; }
   function esc(s)   { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function labelType(t)   { return { full:'종일','half-am':'오전반차','half-pm':'오후반차' }[t] ?? t; }
-  function labelStatus(s) { return { pending:'대기중', approved:'승인', rejected:'반려' }[s] ?? s; }
-
+  function labelType(t)   { return { FULL:'종일', HALF_AM:'오전반차', HALF_PM:'오후반차' }[t] ?? t; }
+  function labelStatus(s) { return { PENDING:'대기중', APPROVED:'승인', REJECTED:'반려' }[s] ?? s; }
   function statusBadgeCls(s) {
-    return { pending:'bg-yellow-100 text-yellow-800', approved:'bg-green-100 text-green-800', rejected:'bg-red-100 text-red-800' }[s] ?? 'bg-gray-100 text-gray-600';
+    return { PENDING:'bg-yellow-100 text-yellow-800', APPROVED:'bg-green-100 text-green-800', REJECTED:'bg-red-100 text-red-800' }[s] ?? 'bg-gray-100 text-gray-600';
   }
   function typeBadgeCls(t) {
-    return { full:'bg-blue-100 text-blue-700','half-am':'bg-orange-100 text-orange-700','half-pm':'bg-purple-100 text-purple-700' }[t] ?? 'bg-gray-100 text-gray-600';
+    return { FULL:'bg-blue-100 text-blue-700', HALF_AM:'bg-orange-100 text-orange-700', HALF_PM:'bg-purple-100 text-purple-700' }[t] ?? 'bg-gray-100 text-gray-600';
   }
-
   function showMsg(el, msg, ok) {
     el.textContent = msg;
     el.className   = `text-sm ${ok ? 'text-green-600' : 'text-red-500'}`;
