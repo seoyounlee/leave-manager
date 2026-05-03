@@ -46,14 +46,14 @@
     <button onclick="doLogout()" class="text-xs text-slate-400 hover:text-red-500 transition px-3 py-1.5 rounded-lg hover:bg-red-50 font-medium">🔓 로그아웃</button>
   </div>
 
-  <!-- 연도 선택 -->
+  <!-- 조회 연도 + 관리 액션 -->
   <div class="flex items-center gap-3 bg-white rounded-xl shadow-sm border border-slate-100 px-5 py-3">
-    <label class="text-sm font-semibold text-slate-500">연도</label>
+    <label class="text-sm font-semibold text-slate-500">조회 연도</label>
     <select id="yearSelect" onchange="onYearChange()" class="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition"></select>
+    <span class="text-[11px] text-slate-400">입사일 기준 자동 갱신</span>
     <div class="ml-auto flex gap-2">
       <button onclick="doAutoRenew()" class="px-4 py-1.5 bg-green-600 hover:bg-green-700 active:scale-95 text-white text-xs font-semibold rounded-lg transition">법정연차 갱신</button>
       <button onclick="showGrantModal()" class="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-semibold rounded-lg transition">재량연차 부여</button>
-      <button onclick="showStartYearModal()" class="px-4 py-1.5 bg-indigo-500 hover:bg-indigo-600 active:scale-95 text-white text-xs font-semibold rounded-lg transition">새 연차 기간 시작</button>
     </div>
   </div>
 
@@ -232,28 +232,6 @@
   </div>
 
   <a href="/" class="text-center text-slate-400 text-xs hover:text-blue-400 transition mt-1 pb-2">→ 직원 신청 페이지</a>
-</div>
-
-<!-- 새 연차 기간 모달 -->
-<div id="startYearModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" style="display:none" onclick="if(event.target===this)closeStartYearModal()"
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-8 flex flex-col gap-5 animate-fade-up">
-    <h2 class="text-lg font-bold text-slate-800">새 연차 기간 시작</h2>
-    <div class="flex flex-col gap-3">
-      <div><label class="text-xs font-medium text-slate-500 mb-1 block">연도</label><input type="number" id="startYearInput" min="2020" max="2100" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition" /></div>
-      <div><label class="text-xs font-medium text-slate-500 mb-1 block">이월 방식</label>
-        <select id="carryOverSelect" onchange="document.getElementById('maxCarryOverDiv').style.display=this.value==='partial'?'':'none'" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition">
-          <option value="none">이월 없음 (잔여 소멸)</option><option value="all">전액 이월</option><option value="partial">일부 이월 (최대 N일)</option>
-        </select>
-      </div>
-      <div id="maxCarryOverDiv" style="display:none"><label class="text-xs font-medium text-slate-500 mb-1 block">최대 이월 일수</label><input type="number" id="maxCarryOverInput" value="5" min="0" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition" /></div>
-    </div>
-    <p class="text-xs text-slate-400">모든 재직 중인 직원에 대해 선택한 연도의 연차 기간이 생성됩니다.</p>
-    <div class="flex gap-3">
-      <button onclick="doStartYear()" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold rounded-xl transition">시작</button>
-      <button onclick="closeStartYearModal()" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition">취소</button>
-    </div>
-    <p id="startYearMsg" class="text-sm text-center min-h-[18px]"></p>
-  </div>
 </div>
 
 <!-- 재량연차 부여 모달 -->
@@ -903,17 +881,6 @@
     document.getElementById('emGrantReason').value = '';
     await loadAll();
     openEmpModal(modalEmpId); // 모달 새로고침
-  }
-
-  // ── 새 연차 기간 모달 ─────────────────────────────────────────────────────
-  function showStartYearModal() { document.getElementById('startYearInput').value=new Date().getFullYear()+1;document.getElementById('carryOverSelect').value='none';document.getElementById('maxCarryOverDiv').style.display='none';document.getElementById('startYearMsg').textContent='';document.getElementById('startYearModal').style.display='flex'; }
-  function closeStartYearModal() { document.getElementById('startYearModal').style.display='none'; }
-  async function doStartYear() {
-    const year=parseInt(document.getElementById('startYearInput').value),co=document.getElementById('carryOverSelect').value,mc=parseInt(document.getElementById('maxCarryOverInput').value)||0,msgEl=document.getElementById('startYearMsg');
-    const res=await fetch(`${API}/leave-years/start`,{method:'POST',headers:adminHeaders(),body:JSON.stringify({year,carryOverOption:co,maxCarryOver:mc})});
-    const data=await res.json();if(!res.ok){msgEl.textContent=data.error;msgEl.className='text-sm text-red-500 text-center';return;}
-    msgEl.textContent=`${year}년 연차 기간 생성: ${data.created}명 완료, ${data.skipped}명 건너뜀`;msgEl.className='text-sm text-green-600 text-center';
-    await loadYears();selectedYear=year;document.getElementById('yearSelect').value=year;await loadAll();setTimeout(closeStartYearModal,1500);
   }
 
   // ── 전체 달력 ─────────────────────────────────────────────────────────────
