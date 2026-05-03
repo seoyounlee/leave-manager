@@ -271,15 +271,17 @@ export async function autoRenewLeave(): Promise<{ updated: number; skipped: numb
       continue;
     }
 
-    // 법정보다 낮으면 증가
-    if (thisYearLy.totalDays < legalDays) {
-      const diff = round1(legalDays - thisYearLy.totalDays);
+    // 법정보다 낮으면 증가 (이월분 제외한 기본 일수 기준)
+    const baseDays = round1(thisYearLy.totalDays - thisYearLy.carryOver);
+    if (baseDays < legalDays) {
+      const newTotal = round1(legalDays + thisYearLy.carryOver);
+      const diff = round1(newTotal - thisYearLy.totalDays);
       const prevNote = thisYearLy.note ? thisYearLy.note + "\n" : "";
       await prisma.leaveYear.update({
         where: { id: thisYearLy.id },
-        data: { totalDays: legalDays, note: prevNote + `[${today}] 법정 갱신 +${diff}일 → ${legalDays}일` },
+        data: { totalDays: newTotal, note: prevNote + `[${today}] 법정 갱신 +${diff}일 → ${newTotal}일 (법정${legalDays}+이월${thisYearLy.carryOver})` },
       });
-      details.push(`${emp.name}: +${diff} → ${legalDays}일`);
+      details.push(`${emp.name}: +${diff} → ${newTotal}일`);
       updated++;
       continue;
     }
