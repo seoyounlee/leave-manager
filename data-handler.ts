@@ -473,10 +473,10 @@ export async function deleteEmployee(
 ): Promise<EmployeeWithYear[]> {
   const emp = await prisma.employee.findUnique({ where: { id: employeeId } });
   if (!emp) throw new Error("직원을 찾을 수 없습니다.");
-  if (emp.status !== "RESIGNED") throw new Error("퇴사 처리된 직원만 삭제할 수 있습니다.");
 
   // 관련 데이터 모두 삭제 (순서 중요: FK 제약)
   await prisma.leaveRequest.deleteMany({ where: { employeeId } });
+  await prisma.leavePromotion.deleteMany({ where: { employeeId } });
   await prisma.leaveYear.deleteMany({ where: { employeeId } });
   await prisma.employee.delete({ where: { id: employeeId } });
 

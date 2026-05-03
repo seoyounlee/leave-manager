@@ -391,6 +391,17 @@
       <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">신청 내역</p>
       <div id="emReqList" class="flex flex-col gap-2 max-h-64 overflow-y-auto"></div>
     </div>
+
+    <!-- 직원 삭제 -->
+    <div class="border-t border-red-100 pt-4 mt-2">
+      <details class="group">
+        <summary class="text-xs text-slate-400 cursor-pointer hover:text-red-500 transition select-none">위험 영역</summary>
+        <div class="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl">
+          <p class="text-xs text-red-600 mb-2">직원과 모든 관련 데이터(연차, 신청, 촉진 기록)가 영구 삭제됩니다.</p>
+          <button onclick="deleteEmpFromModal()" class="px-4 py-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white text-xs font-bold rounded-lg transition">이 직원 영구 삭제</button>
+        </div>
+      </details>
+    </div>
   </div>
 </div>
 
@@ -1012,6 +1023,22 @@
   }
 
   // ── 이월 정책 저장 ──────────────────────────────────────────────────────────
+  async function deleteEmpFromModal() {
+    const emp = employees.find(e=>e.id===modalEmpId);
+    if (!emp) return;
+    if (!confirm(`정말 "${emp.name}"님을 삭제합니다?\n\n연차 기록, 신청 내역, 촉진 기록이 모두 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
+    if (prompt(`삭제를 확인하려면 직원 이름 "${emp.name}"을(를) 입력하세요:`) !== emp.name) { alert('이름이 일치하지 않습니다.'); return; }
+    const res = await fetch(`${API}/employees/${modalEmpId}`, { method: 'DELETE', headers: adminHeaders() });
+    const data = await res.json();
+    if (!res.ok) { alert('삭제 실패: ' + data.error); return; }
+    closeEmpModal();
+    employees = data;
+    renderEmployees();
+    allRequests = await fetch(`${API}/requests?year=${selectedYear}`).then(r=>r.json());
+    renderAll();
+    alert(`${emp.name}님이 삭제되었습니다.`);
+  }
+
   async function saveCarryPolicy() {
     const policy = document.getElementById('emCarryPolicy').value;
     const msgEl = document.getElementById('emCarryMsg');
