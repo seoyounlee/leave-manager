@@ -21,6 +21,8 @@ import {
   startLeaveYear,
   grantExtraDays,
   autoRenewLeave,
+  getRenewalCountdown,
+  setCarryOverPolicy,
   calcLegalLeaveDays,
   createPromotion,
   getPromotions,
@@ -459,12 +461,32 @@ app.post("/api/leave-years/auto-renew", requireAdmin, async (_req, res) => {
 
 app.get("/api/employees/:id/legal-days", async (req, res) => {
   try {
-    const emp = await import("./db").then(m => m.prisma.employee.findUnique({ where: { id: req.params.id as string } }));
+    const { prisma } = await import("./db");
+    const emp = await prisma.employee.findUnique({ where: { id: req.params.id as string } });
     if (!emp) { res.status(404).json({ error: "직원을 찾을 수 없습니다." }); return; }
     const days = calcLegalLeaveDays(emp.joinedAt);
     res.json({ legalDays: days, joinedAt: emp.joinedAt.toISOString() });
   } catch (e: unknown) {
     res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+app.get("/api/renewal-countdown", requireAdmin, async (_req, res) => {
+  try {
+    res.json(await getRenewalCountdown());
+  } catch (e: unknown) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+app.patch("/api/employees/:id/carry-over-policy", requireAdmin, async (req, res) => {
+  const { policy } = req.body as { policy?: string };
+  if (!policy) { res.status(400).json({ error: "policy는 필수입니다." }); return; }
+  try {
+    await setCarryOverPolicy(req.params.id as string, policy);
+    res.json({ ok: true });
+  } catch (e: unknown) {
+    res.status(400).json({ error: (e as Error).message });
   }
 });
 

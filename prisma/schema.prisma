@@ -17,6 +17,8 @@ model Employee {
   joinedAt        DateTime
   status          EmployeeStatus  @default(ACTIVE)
   promotionStatus PromotionStatus @default(NONE)
+  carryOverPolicy CarryOverPolicy @default(EXPIRE)
+  lastRenewedAt   DateTime?
   resignedAt      DateTime?
   createdAt       DateTime        @default(now())
   totalDays       Float           @default(0)
@@ -34,6 +36,13 @@ enum PromotionStatus {
   NONE
   FIRST_DONE
   SECOND_DONE
+}
+
+enum CarryOverPolicy {
+  EXPIRE
+  CARRY_ALL
+  CARRY_MAX5
+  CARRY_MAX10
 }
 
 model LeaveYear {

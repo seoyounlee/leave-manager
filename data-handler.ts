@@ -47,6 +47,7 @@ export interface EmployeeWithYear {
   carryOver: number;
   hasPassword: boolean;
   leaveNote: string | null;
+  carryOverPolicy: string;
 }
 
 export interface PromotionView {
@@ -104,6 +105,7 @@ function toEmployeeView(emp: Employee, ly: LeaveYear | null): EmployeeWithYear {
     carryOver: ly?.carryOver ?? 0,
     hasPassword: !!emp.password,
     leaveNote: ly?.note ?? null,
+    carryOverPolicy: emp.carryOverPolicy,
   };
 }
 
@@ -183,10 +185,13 @@ export function nextRenewalDate(joinedAt: Date, referenceDate: Date = new Date()
 }
 
 /**
- * 전체 재직 직원 연차 자동 갱신
- * - joinedAt 기준으로 법정 연차 계산
- * - 현재 연도의 LeaveYear.totalDays와 비교, 다르면 업데이트
- * - 이력(note)에 갱신 로그 기록
+ * 전체 재직 직원 연차 자동 갱신 (입사기념일 기준)
+ * 1) 올해 LeaveYear가 없으면 생성
+ * 2) 입사기념일이 지났고 lastRenewedAt이 올해 갱신 전이면:
+ *    - 이월 정책에 따라 잔여연차 처리
+ *    - usedDays 초기화, 새 totalDays 부여
+ *    - promotionStatus 초기화
+ * 3) 법정 일수보다 낮으면 자동 증가
  */
 export async function autoRenewLeave(): Promise<{ updated: number; skipped: number; details: string[] }> {
   const now = new Date();
@@ -195,7 +200,7 @@ export async function autoRenewLeave(): Promise<{ updated: number; skipped: numb
 
   const activeEmps = await prisma.employee.findMany({
     where: { status: "ACTIVE" },
-    include: { leaveYears: { where: { year: y } } },
+    include: { leaveYears: { orderBy: { year: "desc" } } },
   });
 
   let updated = 0;
@@ -204,11 +209,60 @@ export async function autoRenewLeave(): Promise<{ updated: number; skipped: numb
 
   for (const emp of activeEmps) {
     const legalDays = calcLegalLeaveDays(emp.joinedAt, now);
-    const ly = emp.leaveYears[0];
+    const thisYearLy = emp.leaveYears.find((l) => l.year === y);
+    const lastYearLy = emp.leaveYears.find((l) => l.year === y - 1);
 
-    if (!ly) {
-      // LeaveYear가 없으면 생성
-      const note = `[${today}] 연차 자동 생성: 법정 ${legalDays}일 (입사일 ${emp.joinedAt.toISOString().slice(0, 10)})`;
+    // 올해 입사기념일
+    const anniv = new Date(emp.joinedAt);
+    anniv.setFullYear(y);
+    const annivPassed = now >= anniv;
+
+    // 갱신 필요 여부: 기념일 지남 + 올해 아직 갱신 안 됨
+    const alreadyRenewed = emp.lastRenewedAt && emp.lastRenewedAt.getFullYear() === y
+      && emp.lastRenewedAt >= anniv;
+    const needsRenewal = annivPassed && !alreadyRenewed;
+
+    if (needsRenewal && lastYearLy) {
+      // 이월 정책 계산
+      const remaining = round1(Math.max(0, lastYearLy.totalDays - lastYearLy.usedDays));
+      let carryOver = 0;
+      if (emp.carryOverPolicy === "CARRY_ALL") carryOver = remaining;
+      else if (emp.carryOverPolicy === "CARRY_MAX5") carryOver = Math.min(remaining, 5);
+      else if (emp.carryOverPolicy === "CARRY_MAX10") carryOver = Math.min(remaining, 10);
+      // EXPIRE = 0
+
+      const newTotal = round1(legalDays + carryOver);
+      const note = `[${today}] ${y}년 입사기념일 갱신: 법정 ${legalDays}일` +
+        (carryOver > 0 ? ` + 이월 ${carryOver}일` : ` (잔여 ${remaining}일 소멸)`) +
+        ` = ${newTotal}일`;
+
+      if (thisYearLy) {
+        // 이미 올해 LeaveYear 있으면 리셋
+        const prevNote = thisYearLy.note ? thisYearLy.note + "\n" : "";
+        await prisma.leaveYear.update({
+          where: { id: thisYearLy.id },
+          data: { totalDays: newTotal, usedDays: 0, carryOver: round1(carryOver), note: prevNote + note },
+        });
+      } else {
+        await prisma.leaveYear.create({
+          data: { employeeId: emp.id, year: y, totalDays: newTotal, usedDays: 0, carryOver: round1(carryOver), note },
+        });
+      }
+
+      // lastRenewedAt + promotionStatus 리셋
+      await prisma.employee.update({
+        where: { id: emp.id },
+        data: { lastRenewedAt: now, totalDays: legalDays, promotionStatus: "NONE" },
+      });
+
+      details.push(`${emp.name}: 갱신 ${newTotal}일 (법정${legalDays}+이월${carryOver})`);
+      updated++;
+      continue;
+    }
+
+    // 갱신 불필요 — 올해 LeaveYear 없으면 생성만
+    if (!thisYearLy) {
+      const note = `[${today}] 연차 자동 생성: 법정 ${legalDays}일`;
       await prisma.leaveYear.create({
         data: { employeeId: emp.id, year: y, totalDays: legalDays, usedDays: 0, carryOver: 0, note },
       });
@@ -217,27 +271,89 @@ export async function autoRenewLeave(): Promise<{ updated: number; skipped: numb
       continue;
     }
 
-    // 이미 수동으로 조정된 값이 법정보다 높으면 건너뜀 (수동 > 법정 존중)
-    if (ly.totalDays >= legalDays) {
-      skipped++;
+    // 법정보다 낮으면 증가
+    if (thisYearLy.totalDays < legalDays) {
+      const diff = round1(legalDays - thisYearLy.totalDays);
+      const prevNote = thisYearLy.note ? thisYearLy.note + "\n" : "";
+      await prisma.leaveYear.update({
+        where: { id: thisYearLy.id },
+        data: { totalDays: legalDays, note: prevNote + `[${today}] 법정 갱신 +${diff}일 → ${legalDays}일` },
+      });
+      details.push(`${emp.name}: +${diff} → ${legalDays}일`);
+      updated++;
       continue;
     }
 
-    // 갱신 필요
-    const diff = round1(legalDays - ly.totalDays);
-    const prevNote = ly.note ? ly.note + "\n" : "";
-    const note = `[${today}] 연차 자동 갱신: ${ly.totalDays}일 → ${legalDays}일 (+${diff}일, 근로기준법 기준)`;
-
-    await prisma.leaveYear.update({
-      where: { id: ly.id },
-      data: { totalDays: legalDays, note: prevNote + note },
-    });
-
-    details.push(`${emp.name}: ${ly.totalDays} → ${legalDays}일 (+${diff})`);
-    updated++;
+    skipped++;
   }
 
   return { updated, skipped, details };
+}
+
+/**
+ * D-30 갱신 예정자 조회 (입사기념일 기준)
+ */
+export async function getRenewalCountdown(): Promise<Array<{
+  id: string; name: string; department: string; joinedAt: string;
+  anniversaryDate: string; dDay: number; legalDays: number; currentTotal: number;
+  carryOverPolicy: string;
+}>> {
+  const now = new Date();
+  const y = now.getFullYear();
+  const todayMs = now.getTime();
+
+  const emps = await prisma.employee.findMany({
+    where: { status: "ACTIVE" },
+    include: { leaveYears: { where: { year: y } } },
+  });
+
+  const results: Array<{
+    id: string; name: string; department: string; joinedAt: string;
+    anniversaryDate: string; dDay: number; legalDays: number; currentTotal: number;
+    carryOverPolicy: string;
+  }> = [];
+
+  for (const emp of emps) {
+    const anniv = new Date(emp.joinedAt);
+    anniv.setFullYear(y);
+    // 이미 지났으면 내년
+    if (anniv.getTime() < todayMs) anniv.setFullYear(y + 1);
+
+    const dDay = Math.ceil((anniv.getTime() - todayMs) / (1000 * 60 * 60 * 24));
+    if (dDay > 30) continue;
+
+    const legal = calcLegalLeaveDays(emp.joinedAt, anniv);
+    const ly = emp.leaveYears[0];
+
+    results.push({
+      id: emp.id,
+      name: emp.name,
+      department: emp.department,
+      joinedAt: emp.joinedAt.toISOString().slice(0, 10),
+      anniversaryDate: anniv.toISOString().slice(0, 10),
+      dDay,
+      legalDays: legal,
+      currentTotal: ly?.totalDays ?? 0,
+      carryOverPolicy: emp.carryOverPolicy,
+    });
+  }
+
+  return results.sort((a, b) => a.dDay - b.dDay);
+}
+
+/**
+ * 직원별 이월 정책 변경
+ */
+export async function setCarryOverPolicy(
+  employeeId: string,
+  policy: string,
+): Promise<void> {
+  const valid = ["EXPIRE", "CARRY_ALL", "CARRY_MAX5", "CARRY_MAX10"];
+  if (!valid.includes(policy)) throw new Error("유효하지 않은 이월 정책입니다.");
+  await prisma.employee.update({
+    where: { id: employeeId },
+    data: { carryOverPolicy: policy as "EXPIRE" | "CARRY_ALL" | "CARRY_MAX5" | "CARRY_MAX10" },
+  });
 }
 
 // ─── 직원 조회 ──────────────────────────────────────────────────────────────

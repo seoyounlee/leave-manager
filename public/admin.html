@@ -76,6 +76,16 @@
     </div>
   </div>
 
+  <!-- D-30 갱신 예정자 -->
+  <div id="renewalSection" style="display:none" class="bg-white rounded-2xl shadow-sm border border-orange-200 p-5 animate-fade-up">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="text-lg">⏰</span>
+      <h2 class="font-semibold text-orange-700 text-sm">D-30 연차 갱신 예정자</h2>
+      <span id="renewalCount" class="text-xs text-orange-500 font-bold"></span>
+    </div>
+    <div id="renewalList" class="flex flex-col gap-2"></div>
+  </div>
+
   <!-- 탭 -->
   <div class="flex gap-1 bg-slate-200 rounded-xl p-1">
     <button class="tab-btn flex-1 py-2 rounded-lg text-sm font-semibold transition active" onclick="switchTab('pending')">승인 대기 <span id="pendingCount" class="text-red-500 font-bold"></span></button>
@@ -301,6 +311,21 @@
       </div>
     </div>
 
+    <!-- 이월 정책 -->
+    <div class="border-t border-slate-100 pt-4">
+      <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">연차 이월 정책</p>
+      <div class="flex items-center gap-2">
+        <select id="emCarryPolicy" class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition">
+          <option value="EXPIRE">자동 소멸 (이월 없음)</option>
+          <option value="CARRY_ALL">전액 이월</option>
+          <option value="CARRY_MAX5">최대 5일 이월</option>
+          <option value="CARRY_MAX10">최대 10일 이월</option>
+        </select>
+        <button onclick="saveCarryPolicy()" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 active:scale-95 text-white text-xs font-semibold rounded-lg transition">저장</button>
+      </div>
+      <p id="emCarryMsg" class="text-xs mt-1.5 min-h-[16px]"></p>
+    </div>
+
     <!-- 비밀번호 설정 -->
     <div class="border-t border-slate-100 pt-4">
       <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">신청용 비밀번호</p>
@@ -434,7 +459,7 @@
   })();
 
   // ── 초기화 / 데이터 ───────────────────────────────────────────────────────
-  async function initApp() { await loadYears(); await loadAll(); }
+  async function initApp() { await loadYears(); await loadAll(); loadRenewalCountdown(); }
   async function loadYears() {
     const years = await fetch(`${API}/years`).then(r=>r.json());
     const sel = document.getElementById('yearSelect');
@@ -618,6 +643,9 @@
     fetch(`${API}/employees/${id}/memo`,{headers:adminHeaders()}).then(r=>r.json()).then(d=>{
       document.getElementById('emMemo').value = d.memo || '';
     });
+    // 이월 정책
+    document.getElementById('emCarryPolicy').value = emp.carryOverPolicy || 'EXPIRE';
+    document.getElementById('emCarryMsg').textContent = '';
     // 재량연차 부여 초기화
     document.getElementById('emGrantDays').value = '';
     document.getElementById('emGrantReason').value = '';
@@ -952,6 +980,49 @@
   function tcDotCls(type, isPending) {
     if (isPending) return 'bg-yellow-400 border border-yellow-500';
     return {FULL:'bg-blue-500',HALF_AM:'bg-orange-400',HALF_PM:'bg-purple-400',TIME_1H:'bg-teal-500',TIME_2H:'bg-teal-500',TIME_3H:'bg-teal-500',SUPPORT_2H:'bg-pink-500'}[type] ?? 'bg-slate-400';
+  }
+
+  // ── D-30 갱신 카운트다운 ─────────────────────────────────────────────────────
+  async function loadRenewalCountdown() {
+    try {
+      const data = await fetch(`${API}/renewal-countdown`, { headers: adminHeaders() }).then(r => r.json());
+      const sec = document.getElementById('renewalSection');
+      const list = document.getElementById('renewalList');
+      if (!data.length) { sec.style.display = 'none'; return; }
+      sec.style.display = 'block';
+      document.getElementById('renewalCount').textContent = `${data.length}명`;
+      const POLICY_KO = { EXPIRE: '소멸', CARRY_ALL: '전액이월', CARRY_MAX5: '최대5일', CARRY_MAX10: '최대10일' };
+      list.innerHTML = data.map(r => {
+        const dBadge = r.dDay <= 7
+          ? 'bg-red-500 text-white'
+          : r.dDay <= 14 ? 'bg-orange-400 text-white' : 'bg-yellow-100 text-yellow-800';
+        return `<div class="flex items-center justify-between gap-3 border border-orange-100 rounded-xl px-4 py-3 hover:bg-orange-50 transition">
+          <div class="flex items-center gap-3">
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold ${dBadge}">D-${r.dDay}</span>
+            <div>
+              <span class="font-semibold text-sm text-slate-700">${esc(r.name)}</span>
+              <span class="text-xs text-slate-400 ml-2">${esc(r.department)}</span>
+              <p class="text-[11px] text-slate-400">기념일 ${r.anniversaryDate} · 법정 ${r.legalDays}일 · 현재 ${r.currentTotal}일 · ${POLICY_KO[r.carryOverPolicy] || r.carryOverPolicy}</p>
+            </div>
+          </div>
+          <button onclick="openEmpModal('${r.id}')" class="text-xs text-blue-500 hover:text-blue-700 font-semibold whitespace-nowrap">상세</button>
+        </div>`;
+      }).join('');
+    } catch (e) { console.error('갱신 카운트다운 로드 실패', e); }
+  }
+
+  // ── 이월 정책 저장 ──────────────────────────────────────────────────────────
+  async function saveCarryPolicy() {
+    const policy = document.getElementById('emCarryPolicy').value;
+    const msgEl = document.getElementById('emCarryMsg');
+    const res = await fetch(`${API}/employees/${modalEmpId}/carry-over-policy`, {
+      method: 'PATCH', headers: adminHeaders(), body: JSON.stringify({ policy }),
+    });
+    if (!res.ok) { const d = await res.json(); msgEl.textContent = d.error; msgEl.className = 'text-xs text-red-500 mt-1.5'; return; }
+    msgEl.textContent = '저장 완료'; msgEl.className = 'text-xs text-green-600 mt-1.5';
+    const emp = employees.find(e => e.id === modalEmpId);
+    if (emp) emp.carryOverPolicy = policy;
+    setTimeout(() => msgEl.textContent = '', 2000);
   }
 
   // ── 촉진 PDF 생성 (jsPDF + 한글 폰트) ────────────────────────────────────────
