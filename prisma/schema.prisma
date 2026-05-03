@@ -50,6 +50,8 @@ model LeaveYear {
   employee   Employee @relation(fields: [employeeId], references: [id])
   employeeId String
   year       Int
+  startDate  String?
+  endDate    String?
   totalDays  Float
   usedDays   Float    @default(0)
   carryOver  Float    @default(0)

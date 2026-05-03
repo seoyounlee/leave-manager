@@ -50,6 +50,8 @@ export interface EmployeeWithYear {
   carryOverPolicy: string;
   renewalDate: string;
   renewalDDay: number;
+  bucketStart: string | null;
+  bucketEnd: string | null;
 }
 
 export interface PromotionView {
@@ -99,6 +101,38 @@ function calcRenewalInfo(joinedAt: Date): { renewalDate: string; renewalDDay: nu
   return { renewalDate: anniv.toISOString().slice(0, 10), renewalDDay: dDay };
 }
 
+/**
+ * 연차 날짜가 속하는 LeaveYear 버킷 찾기 (입사기념일 기간 기준)
+ */
+async function findBucketForDate(employeeId: string, leaveDate: string): Promise<LeaveYear | null> {
+  // startDate/endDate가 설정된 버킷에서 매칭
+  const buckets = await prisma.leaveYear.findMany({
+    where: { employeeId },
+    orderBy: { year: "desc" },
+  });
+  for (const b of buckets) {
+    if (b.startDate && b.endDate && leaveDate >= b.startDate && leaveDate <= b.endDate) {
+      return b;
+    }
+  }
+  // fallback: 날짜의 연도로 매칭
+  const dateYear = parseInt(leaveDate.slice(0, 4));
+  return buckets.find((b) => b.year === dateYear) ?? null;
+}
+
+/**
+ * 입사기념일 기반 startDate/endDate 계산
+ */
+function calcBucketDates(joinedAt: Date, year: number): { startDate: string; endDate: string } {
+  const anniv = new Date(joinedAt);
+  anniv.setFullYear(year);
+  const start = anniv.toISOString().slice(0, 10);
+  const endD = new Date(anniv);
+  endD.setFullYear(endD.getFullYear() + 1);
+  endD.setDate(endD.getDate() - 1);
+  return { startDate: start, endDate: endD.toISOString().slice(0, 10) };
+}
+
 function toEmployeeView(emp: Employee, ly: LeaveYear | null): EmployeeWithYear {
   const total = ly?.totalDays ?? 0;
   const used = ly?.usedDays ?? 0;
@@ -119,6 +153,8 @@ function toEmployeeView(emp: Employee, ly: LeaveYear | null): EmployeeWithYear {
     leaveNote: ly?.note ?? null,
     carryOverPolicy: emp.carryOverPolicy,
     ...calcRenewalInfo(emp.joinedAt),
+    bucketStart: ly?.startDate ?? null,
+    bucketEnd: ly?.endDate ?? null,
   };
 }
 
@@ -258,7 +294,7 @@ export async function autoRenewLeave(): Promise<{ updated: number; skipped: numb
         });
       } else {
         await prisma.leaveYear.create({
-          data: { employeeId: emp.id, year: y, totalDays: newTotal, usedDays: 0, carryOver: round1(carryOver), note },
+          data: { employeeId: emp.id, year: y, totalDays: newTotal, usedDays: 0, carryOver: round1(carryOver), note, ...calcBucketDates(emp.joinedAt, y) },
         });
       }
 
@@ -277,7 +313,7 @@ export async function autoRenewLeave(): Promise<{ updated: number; skipped: numb
     if (!thisYearLy) {
       const note = `[${today}] 연차 자동 생성: 법정 ${legalDays}일`;
       await prisma.leaveYear.create({
-        data: { employeeId: emp.id, year: y, totalDays: legalDays, usedDays: 0, carryOver: 0, note },
+        data: { employeeId: emp.id, year: y, totalDays: legalDays, usedDays: 0, carryOver: 0, note, ...calcBucketDates(emp.joinedAt, y) },
       });
       details.push(`${emp.name}: 신규 생성 ${legalDays}일`);
       updated++;
@@ -411,7 +447,7 @@ export async function addEmployee(
       joinedAt: new Date(joinedAt),
       totalDays,
       leaveYears: {
-        create: { year: y, totalDays, usedDays: 0, carryOver: 0 },
+        create: { year: y, totalDays, usedDays: 0, carryOver: 0, ...calcBucketDates(new Date(joinedAt), y) },
       },
     },
   });
@@ -703,8 +739,13 @@ export async function submitRequest(
     }
   }
 
-  const y = currentYear();
   const days = DAYS_BY_TYPE[fields.type];
+
+  // 연차 날짜가 속하는 버킷 찾기
+  const bucket = await findBucketForDate(employeeId, fields.date);
+  if (!bucket) {
+    throw new Error(`${fields.date}에 해당하는 연차 기간이 없습니다. 관리자에게 문의하세요.`);
+  }
 
   await prisma.leaveRequest.create({
     data: {
@@ -712,7 +753,7 @@ export async function submitRequest(
       date: fields.date,
       type: fields.type,
       days,
-      year: y,
+      year: bucket.year,
       reason: fields.reason.trim(),
     },
   });
