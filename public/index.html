@@ -197,6 +197,7 @@
             <th class="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider pb-2 pr-3">사유</th>
             <th class="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider pb-2 pr-3">상태</th>
             <th class="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider pb-2">메모</th>
+            <th class="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider pb-2"></th>
           </tr>
         </thead>
         <tbody id="reqBody"></tbody>
@@ -316,7 +317,7 @@
 
     if (!list.length) {
       mobile.innerHTML  = `<p class="text-sm text-gray-300 text-center py-4">신청 내역이 없습니다.</p>`;
-      tbody.innerHTML   = `<tr><td colspan="5" class="text-center text-gray-300 py-6 text-sm">신청 내역이 없습니다.</td></tr>`;
+      tbody.innerHTML   = `<tr><td colspan="6" class="text-center text-gray-300 py-6 text-sm">신청 내역이 없습니다.</td></tr>`;
       desktop.style.display = 'none';
       return;
     }
@@ -334,7 +335,10 @@
           <p class="text-xs text-gray-500">${esc(r.reason)}</p>
           ${r.reviewNote ? `<p class="text-xs text-gray-400">${esc(r.reviewNote)}</p>` : ''}
         </div>
-        <span class="${statusBadgeCls(r.status)} flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-bold">${labelStatus(r.status)}</span>
+        <div class="flex flex-col items-end gap-1">
+          <span class="${statusBadgeCls(r.status)} px-2.5 py-1 rounded-full text-xs font-bold">${labelStatus(r.status)}</span>
+          ${r.status==='APPROVED'?`<a href="${gcalUrl(r)}" target="_blank" class="text-[10px] text-blue-500 hover:text-blue-700">📅 캘린더 추가</a>`:''}
+        </div>
       </div>
     `).join('');
 
@@ -345,6 +349,7 @@
         <td class="py-3 pr-3 text-sm text-gray-600 max-w-[140px] truncate">${esc(r.reason)}</td>
         <td class="py-3 pr-3"><span class="${statusBadgeCls(r.status)} px-2.5 py-0.5 rounded-full text-xs font-bold">${labelStatus(r.status)}</span></td>
         <td class="py-3 text-xs text-gray-400">${r.reviewNote ? esc(r.reviewNote) : '—'}</td>
+        <td class="py-3 pr-3">${r.status==='APPROVED'?`<a href="${gcalUrl(r)}" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 whitespace-nowrap">📅 캘린더</a>`:''}</td>
       </tr>
     `).join('');
   }
@@ -435,6 +440,14 @@
   }
   function typeBadgeCls(t) {
     return { FULL:'bg-blue-100 text-blue-700', HALF_AM:'bg-orange-100 text-orange-700', HALF_PM:'bg-purple-100 text-purple-700', TIME_1H:'bg-teal-100 text-teal-700', TIME_2H:'bg-teal-100 text-teal-700', TIME_3H:'bg-teal-100 text-teal-700', SUPPORT_2H:'bg-pink-100 text-pink-700' }[t] ?? 'bg-gray-100 text-gray-600';
+  }
+  function gcalUrl(r) {
+    const d = r.date.replace(/-/g,'');
+    const next = new Date(r.date); next.setDate(next.getDate()+1);
+    const d2 = next.toISOString().slice(0,10).replace(/-/g,'');
+    const title = encodeURIComponent(`[연차] ${r.employeeName}`);
+    const detail = encodeURIComponent(`${labelType(r.type)} ${r.days}일 · ${r.reason}`);
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${d}/${d2}&details=${detail}`;
   }
   function showMsg(el, msg, ok) {
     el.textContent = msg;
