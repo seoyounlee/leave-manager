@@ -92,8 +92,8 @@
     </div>
   </div>
 
-  <!-- 달력 -->
-  <div id="calCard" style="display:none" class="animate-fade-up bg-white rounded-2xl shadow-sm p-5">
+  <!-- 달력 (항상 표시) -->
+  <div id="calCard" class="bg-white rounded-2xl shadow-sm p-5">
     <div class="flex items-center justify-between mb-4">
       <button onclick="calPrev()" class="px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm transition">&lt;</button>
       <p class="text-sm font-bold text-gray-700" id="calTitle">2026년 5월</p>
@@ -234,7 +234,7 @@
     const id = document.getElementById('empSelect').value;
     if (!id) {
       selectedEmpId = null;
-      ['heroCard','calCard','formCard','listCard','promoAlert'].forEach(cid => hide(cid));
+      ['heroCard','formCard','listCard','promoAlert'].forEach(cid => hide(cid));
       return;
     }
     selectEmp(id);
@@ -247,7 +247,7 @@
     showAllYears   = false;
     hide('dateWarn');
     document.getElementById('formMsg').textContent = '';
-    ['heroCard','calCard','formCard','listCard'].forEach(cid => show(cid));
+    ['heroCard','formCard','listCard'].forEach(cid => show(cid));
     const emp = employees.find(e => e.id === id);
     if (emp) { updateHero(emp, 0); await loadMyRequests(emp); await loadCalData(); await loadPromotions(id); }
   }
@@ -481,12 +481,12 @@
   let calMonth = new Date().getMonth(); // 0-based
   let calRequests = [];
 
-  function calPrev() { calMonth--; if(calMonth<0){calMonth=11;calYear--;} renderCal(); }
-  function calNext() { calMonth++; if(calMonth>11){calMonth=0;calYear++;} renderCal(); }
+  function calPrev() { calMonth--; if(calMonth<0){calMonth=11;calYear--;} loadCalData(); }
+  function calNext() { calMonth++; if(calMonth>11){calMonth=0;calYear++;} loadCalData(); }
 
   async function loadCalData() {
-    if (!selectedEmpId) return;
-    calRequests = await fetch(`${API}/requests?employeeId=${selectedEmpId}`).then(r=>r.json());
+    // 전체 직원 일정 로드
+    calRequests = await fetch(`${API}/requests?year=${calYear}`).then(r=>r.json());
     renderCal();
   }
 
@@ -497,23 +497,28 @@
     const lastDay = new Date(calYear, calMonth+1, 0).getDate();
     const startDow = first.getDay();
     const today = new Date().toISOString().slice(0,10);
+    const monthStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}`;
 
     let html = '';
-    // 빈 칸
-    for (let i=0; i<startDow; i++) html += '<div class="h-10"></div>';
-    // 날짜
+    for (let i=0; i<startDow; i++) html += '<div class="min-h-[56px]"></div>';
+
     for (let d=1; d<=lastDay; d++) {
-      const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const dateStr = `${monthStr}-${String(d).padStart(2,'0')}`;
       const isToday = dateStr === today;
-      const reqs = calRequests.filter(r => r.date === dateStr && r.status !== 'REJECTED');
-      const dots = reqs.map(r => {
+      const dow = (startDow + d - 1) % 7;
+      const dayReqs = calRequests.filter(r => r.date === dateStr && r.status !== 'REJECTED');
+
+      const entries = dayReqs.slice(0,3).map(r => {
         const isPending = r.status === 'PENDING';
-        const color = calDotColor(r.type, isPending);
-        return `<span class="w-1.5 h-1.5 rounded-full ${color}" title="${labelType(r.type)}${isPending?' (대기)':''}"></span>`;
+        const dotCls = calDotColor(r.type, isPending);
+        const isMe = r.employeeId === selectedEmpId;
+        return `<div class="flex items-center gap-0.5 truncate ${isMe?'font-bold':''}"><span class="w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotCls}"></span><span class="truncate">${esc(r.employeeName)}</span></div>`;
       }).join('');
-      html += `<div class="h-10 flex flex-col items-center justify-center rounded-lg ${isToday?'bg-blue-50 ring-1 ring-blue-300':''} text-xs ${reqs.length?'font-bold':'text-gray-500'} cursor-pointer hover:bg-gray-50 transition" onclick="calClickDate('${dateStr}')">
-        <span>${d}</span>
-        ${dots ? `<div class="flex gap-0.5 mt-0.5">${dots}</div>` : ''}
+      const more = dayReqs.length > 3 ? `<div class="text-gray-400">+${dayReqs.length-3}</div>` : '';
+
+      html += `<div class="min-h-[56px] border border-gray-50 rounded-lg p-1 ${isToday?'bg-blue-50 ring-1 ring-blue-300':''} cursor-pointer hover:bg-gray-50 transition" onclick="calClickDate('${dateStr}')">
+        <div class="text-[11px] font-semibold mb-0.5 ${dow===0?'text-red-400':dow===6?'text-blue-400':'text-gray-500'}">${d}</div>
+        <div class="flex flex-col gap-0.5 text-[9px] text-gray-600 leading-tight">${entries}${more}</div>
       </div>`;
     }
     grid.innerHTML = html;
@@ -532,6 +537,7 @@
 
   document.getElementById('fDate').value = new Date().toISOString().slice(0, 10);
   loadEmployees();
+  loadCalData();
 </script>
 </body>
 </html>

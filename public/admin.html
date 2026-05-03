@@ -58,6 +58,7 @@
   <div class="flex gap-1 bg-slate-200 rounded-xl p-1">
     <button class="tab-btn flex-1 py-2 rounded-lg text-sm font-semibold transition active" onclick="switchTab('pending')">승인 대기 <span id="pendingCount" class="text-red-500 font-bold"></span></button>
     <button class="tab-btn flex-1 py-2 rounded-lg text-sm font-semibold transition" onclick="switchTab('all')">전체 내역</button>
+    <button class="tab-btn flex-1 py-2 rounded-lg text-sm font-semibold transition" onclick="switchTab('calendar')">전체 달력</button>
     <button class="tab-btn flex-1 py-2 rounded-lg text-sm font-semibold transition" onclick="switchTab('employees')">직원 현황</button>
   </div>
 
@@ -114,6 +115,27 @@
         </tr></thead>
         <tbody id="allBody"></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- 탭: 전체 달력 -->
+  <div id="tab-calendar" class="hidden bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-4 animate-fade-up">
+    <div class="flex items-center justify-between">
+      <button onclick="teamCalPrev()" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-semibold transition">&lt;</button>
+      <h2 class="text-base font-bold text-slate-700" id="teamCalTitle">2026년 5월</h2>
+      <button onclick="teamCalNext()" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-semibold transition">&gt;</button>
+    </div>
+    <div class="grid grid-cols-7 text-center text-xs font-bold text-slate-400 border-b border-slate-100 pb-2">
+      <span class="text-red-400">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="text-blue-400">토</span>
+    </div>
+    <div id="teamCalGrid" class="grid grid-cols-7 gap-px"></div>
+    <div class="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-400 pt-2 border-t border-slate-100">
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span>종일</span>
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-orange-400"></span>오전반차</span>
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-purple-400"></span>오후반차</span>
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-teal-500"></span>시간차</span>
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-pink-500"></span>지원대휴</span>
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-yellow-400 border border-yellow-500"></span>대기중</span>
     </div>
   </div>
 
@@ -716,6 +738,54 @@
     await loadYears();selectedYear=year;document.getElementById('yearSelect').value=year;await loadAll();setTimeout(closeStartYearModal,1500);
   }
 
+  // ── 전체 달력 ─────────────────────────────────────────────────────────────
+  let tcYear = new Date().getFullYear();
+  let tcMonth = new Date().getMonth();
+
+  function teamCalPrev() { tcMonth--; if(tcMonth<0){tcMonth=11;tcYear--;} renderTeamCal(); }
+  function teamCalNext() { tcMonth++; if(tcMonth>11){tcMonth=0;tcYear++;} renderTeamCal(); }
+
+  function renderTeamCal() {
+    document.getElementById('teamCalTitle').textContent = `${tcYear}년 ${tcMonth+1}월`;
+    const grid = document.getElementById('teamCalGrid');
+    const first = new Date(tcYear, tcMonth, 1);
+    const lastDay = new Date(tcYear, tcMonth+1, 0).getDate();
+    const startDow = first.getDay();
+    const today = new Date().toISOString().slice(0,10);
+
+    // 이번 달 신청 필터
+    const monthStr = `${tcYear}-${String(tcMonth+1).padStart(2,'0')}`;
+    const monthReqs = allRequests.filter(r => r.date.startsWith(monthStr) && r.status !== 'REJECTED');
+
+    let html = '';
+    for (let i=0; i<startDow; i++) html += '<div class="min-h-[72px]"></div>';
+
+    for (let d=1; d<=lastDay; d++) {
+      const dateStr = `${tcYear}-${String(tcMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const isToday = dateStr === today;
+      const dow = (startDow + d - 1) % 7;
+      const isSun = dow === 0, isSat = dow === 6;
+      const dayReqs = monthReqs.filter(r => r.date === dateStr);
+
+      const entries = dayReqs.map(r => {
+        const isPending = r.status === 'PENDING';
+        const dotCls = tcDotCls(r.type, isPending);
+        return `<div class="flex items-center gap-1 truncate"><span class="w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotCls}"></span><span class="truncate">${esc(r.employeeName)}</span></div>`;
+      }).join('');
+
+      html += `<div class="min-h-[72px] border border-slate-50 rounded-lg p-1 ${isToday?'bg-blue-50 ring-1 ring-blue-300':''} hover:bg-slate-50 transition">
+        <div class="text-xs font-semibold mb-0.5 ${isSun?'text-red-400':isSat?'text-blue-400':'text-slate-500'}">${d}</div>
+        <div class="flex flex-col gap-0.5 text-[10px] text-slate-600 leading-tight">${entries}</div>
+      </div>`;
+    }
+    grid.innerHTML = html;
+  }
+
+  function tcDotCls(type, isPending) {
+    if (isPending) return 'bg-yellow-400 border border-yellow-500';
+    return {FULL:'bg-blue-500',HALF_AM:'bg-orange-400',HALF_PM:'bg-purple-400',TIME_1H:'bg-teal-500',TIME_2H:'bg-teal-500',TIME_3H:'bg-teal-500',SUPPORT_2H:'bg-pink-500'}[type] ?? 'bg-slate-400';
+  }
+
   // ── CSV / 탭 / 필터 ───────────────────────────────────────────────────────
   async function downloadCSV() {
     const res=await fetch(`${API}/export/csv?year=${selectedYear}`,{headers:{'X-Admin-Password':savedPw()}});
@@ -724,8 +794,10 @@
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   }
   function switchTab(tab) {
-    ['pending','all','employees'].forEach(t=>document.getElementById(`tab-${t}`).classList.toggle('hidden',t!==tab));
-    document.querySelectorAll('.tab-btn').forEach((btn,i)=>btn.classList.toggle('active',['pending','all','employees'][i]===tab));
+    const tabs = ['pending','all','calendar','employees'];
+    tabs.forEach(t=>document.getElementById(`tab-${t}`).classList.toggle('hidden',t!==tab));
+    document.querySelectorAll('.tab-btn').forEach((btn,i)=>btn.classList.toggle('active',tabs[i]===tab));
+    if (tab === 'calendar') renderTeamCal();
   }
   function setFilter(f,el){ allFilter=f;document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');renderAllRequests(); }
 
