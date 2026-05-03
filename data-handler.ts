@@ -48,6 +48,8 @@ export interface EmployeeWithYear {
   hasPassword: boolean;
   leaveNote: string | null;
   carryOverPolicy: string;
+  renewalDate: string;
+  renewalDDay: number;
 }
 
 export interface PromotionView {
@@ -87,6 +89,16 @@ function currentYear(): number {
   return new Date().getFullYear();
 }
 
+function calcRenewalInfo(joinedAt: Date): { renewalDate: string; renewalDDay: number } {
+  const now = new Date();
+  const y = now.getFullYear();
+  const anniv = new Date(joinedAt);
+  anniv.setFullYear(y);
+  if (anniv.getTime() <= now.getTime()) anniv.setFullYear(y + 1);
+  const dDay = Math.ceil((anniv.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  return { renewalDate: anniv.toISOString().slice(0, 10), renewalDDay: dDay };
+}
+
 function toEmployeeView(emp: Employee, ly: LeaveYear | null): EmployeeWithYear {
   const total = ly?.totalDays ?? 0;
   const used = ly?.usedDays ?? 0;
@@ -106,6 +118,7 @@ function toEmployeeView(emp: Employee, ly: LeaveYear | null): EmployeeWithYear {
     hasPassword: !!emp.password,
     leaveNote: ly?.note ?? null,
     carryOverPolicy: emp.carryOverPolicy,
+    ...calcRenewalInfo(emp.joinedAt),
   };
 }
 
@@ -712,7 +725,7 @@ export async function approveRequest(
 ): Promise<{ employees: EmployeeWithYear[]; requests: RequestView[] }> {
   const req = await prisma.leaveRequest.findUnique({ where: { id: requestId } });
   if (!req) throw new Error("신청 내역을 찾을 수 없습니다.");
-  if (req.status !== "PENDING") {
+  if (req.status !== "PENDING" && req.status !== "REJECTED") {
     throw new Error(`승인할 수 없는 상태입니다. (현재: ${STATUS_KO[req.status as RequestStatus]})`);
   }
 
