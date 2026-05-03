@@ -35,7 +35,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/admin", (_req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.sendFile(path.join(__dirname, "public", "admin.html"));
 });
 
 // ─── 헬퍼 ──────────────────────────────────────────────────────────────────
