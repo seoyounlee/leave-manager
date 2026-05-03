@@ -124,6 +124,122 @@ function toRequestView(req: LeaveRequest & { employee: { name: string } }): Requ
   };
 }
 
+// ─── 근로기준법 연차 계산 ─────────────────────────────────────────────────────
+
+/**
+ * 입사일 기준 법정 연차 일수 계산 (근로기준법 제60조)
+ * - 1년 미만: 매월 개근 시 1일 (최대 11일) — 입사 후 경과 개월 수
+ * - 1년 이상: 15일 + 매 2년마다 1일 가산 (최대 25일)
+ */
+export function calcLegalLeaveDays(joinedAt: Date, referenceDate: Date = new Date()): number {
+  const joinDate = new Date(joinedAt);
+  const ref = new Date(referenceDate);
+
+  // 근속 연수 계산
+  let years = ref.getFullYear() - joinDate.getFullYear();
+  const anniv = new Date(joinDate);
+  anniv.setFullYear(ref.getFullYear());
+  if (ref < anniv) years--;
+
+  if (years < 1) {
+    // 1년 미만: 경과 개월 수 (최대 11일)
+    let months = (ref.getFullYear() - joinDate.getFullYear()) * 12 + (ref.getMonth() - joinDate.getMonth());
+    if (ref.getDate() < joinDate.getDate()) months--;
+    return Math.min(Math.max(0, months), 11);
+  }
+
+  // 1년 이상: 15 + floor((years - 1) / 2), 최대 25
+  const extra = Math.floor((years - 1) / 2);
+  return Math.min(15 + extra, 25);
+}
+
+/**
+ * 다음 연차 갱신일 계산 (입사 기념일 기준)
+ * - 1년 미만: 다음 달 입사일
+ * - 1년 이상: 다음 입사 기념일
+ */
+export function nextRenewalDate(joinedAt: Date, referenceDate: Date = new Date()): Date {
+  const join = new Date(joinedAt);
+  const ref = new Date(referenceDate);
+
+  let years = ref.getFullYear() - join.getFullYear();
+  const anniv = new Date(join);
+  anniv.setFullYear(ref.getFullYear());
+  if (ref < anniv) years--;
+
+  if (years < 1) {
+    // 다음 달 입사일
+    const next = new Date(join);
+    let months = (ref.getFullYear() - join.getFullYear()) * 12 + (ref.getMonth() - join.getMonth());
+    if (ref.getDate() >= join.getDate()) months++;
+    next.setMonth(join.getMonth() + months);
+    return next;
+  }
+
+  // 다음 기념일
+  const nextAnniv = new Date(join);
+  nextAnniv.setFullYear(join.getFullYear() + years + 1);
+  return nextAnniv;
+}
+
+/**
+ * 전체 재직 직원 연차 자동 갱신
+ * - joinedAt 기준으로 법정 연차 계산
+ * - 현재 연도의 LeaveYear.totalDays와 비교, 다르면 업데이트
+ * - 이력(note)에 갱신 로그 기록
+ */
+export async function autoRenewLeave(): Promise<{ updated: number; skipped: number; details: string[] }> {
+  const now = new Date();
+  const y = now.getFullYear();
+  const today = now.toISOString().slice(0, 10);
+
+  const activeEmps = await prisma.employee.findMany({
+    where: { status: "ACTIVE" },
+    include: { leaveYears: { where: { year: y } } },
+  });
+
+  let updated = 0;
+  let skipped = 0;
+  const details: string[] = [];
+
+  for (const emp of activeEmps) {
+    const legalDays = calcLegalLeaveDays(emp.joinedAt, now);
+    const ly = emp.leaveYears[0];
+
+    if (!ly) {
+      // LeaveYear가 없으면 생성
+      const note = `[${today}] 연차 자동 생성: 법정 ${legalDays}일 (입사일 ${emp.joinedAt.toISOString().slice(0, 10)})`;
+      await prisma.leaveYear.create({
+        data: { employeeId: emp.id, year: y, totalDays: legalDays, usedDays: 0, carryOver: 0, note },
+      });
+      details.push(`${emp.name}: 신규 생성 ${legalDays}일`);
+      updated++;
+      continue;
+    }
+
+    // 이미 수동으로 조정된 값이 법정보다 높으면 건너뜀 (수동 > 법정 존중)
+    if (ly.totalDays >= legalDays) {
+      skipped++;
+      continue;
+    }
+
+    // 갱신 필요
+    const diff = round1(legalDays - ly.totalDays);
+    const prevNote = ly.note ? ly.note + "\n" : "";
+    const note = `[${today}] 연차 자동 갱신: ${ly.totalDays}일 → ${legalDays}일 (+${diff}일, 근로기준법 기준)`;
+
+    await prisma.leaveYear.update({
+      where: { id: ly.id },
+      data: { totalDays: legalDays, note: prevNote + note },
+    });
+
+    details.push(`${emp.name}: ${ly.totalDays} → ${legalDays}일 (+${diff})`);
+    updated++;
+  }
+
+  return { updated, skipped, details };
+}
+
 // ─── 직원 조회 ──────────────────────────────────────────────────────────────
 
 export async function getEmployees(

@@ -49,6 +49,7 @@
     <label class="text-sm font-semibold text-slate-500">연도</label>
     <select id="yearSelect" onchange="onYearChange()" class="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition"></select>
     <div class="ml-auto flex gap-2">
+      <button onclick="doAutoRenew()" class="px-4 py-1.5 bg-green-600 hover:bg-green-700 active:scale-95 text-white text-xs font-semibold rounded-lg transition">법정연차 갱신</button>
       <button onclick="showGrantModal()" class="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-semibold rounded-lg transition">재량연차 부여</button>
       <button onclick="showStartYearModal()" class="px-4 py-1.5 bg-indigo-500 hover:bg-indigo-600 active:scale-95 text-white text-xs font-semibold rounded-lg transition">새 연차 기간 시작</button>
     </div>
@@ -886,6 +887,18 @@
   function tcDotCls(type, isPending) {
     if (isPending) return 'bg-yellow-400 border border-yellow-500';
     return {FULL:'bg-blue-500',HALF_AM:'bg-orange-400',HALF_PM:'bg-purple-400',TIME_1H:'bg-teal-500',TIME_2H:'bg-teal-500',TIME_3H:'bg-teal-500',SUPPORT_2H:'bg-pink-500'}[type] ?? 'bg-slate-400';
+  }
+
+  // ── 법정연차 자동 갱신 ──────────────────────────────────────────────────────
+  async function doAutoRenew() {
+    if (!confirm('근로기준법에 따라 전체 재직 직원의 연차를 갱신합니다.\n\n- 법정 일수보다 적은 경우만 자동 증가\n- 수동으로 높게 설정한 값은 유지됩니다.\n\n진행하시겠습니까?')) return;
+    const res = await fetch(`${API}/leave-years/auto-renew`, { method: 'POST', headers: adminHeaders() });
+    const data = await res.json();
+    if (!res.ok) { alert('오류: ' + data.error); return; }
+    let msg = `법정연차 갱신 완료\n갱신: ${data.updated}명 / 건너뜀: ${data.skipped}명`;
+    if (data.details?.length) msg += '\n\n' + data.details.join('\n');
+    alert(msg);
+    await loadAll();
   }
 
   // ── CSV / 탭 / 필터 ───────────────────────────────────────────────────────

@@ -20,6 +20,8 @@ import {
   getEmployeeMemo,
   startLeaveYear,
   grantExtraDays,
+  autoRenewLeave,
+  calcLegalLeaveDays,
   createPromotion,
   getPromotions,
   confirmPromotion,
@@ -445,9 +447,50 @@ app.get("/api/export/csv", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── 연차 자동 갱신 API ──────────────────────────────────────────────────────
+
+app.post("/api/leave-years/auto-renew", requireAdmin, async (_req, res) => {
+  try {
+    res.json(await autoRenewLeave());
+  } catch (e: unknown) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+app.get("/api/employees/:id/legal-days", async (req, res) => {
+  try {
+    const emp = await import("./db").then(m => m.prisma.employee.findUnique({ where: { id: req.params.id as string } }));
+    if (!emp) { res.status(404).json({ error: "직원을 찾을 수 없습니다." }); return; }
+    const days = calcLegalLeaveDays(emp.joinedAt);
+    res.json({ legalDays: days, joinedAt: emp.joinedAt.toISOString() });
+  } catch (e: unknown) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
 // ─── 서버 시작 ──────────────────────────────────────────────────────────────
 
+// Vercel: 첫 요청 시 자동 갱신 실행 (1회)
+let renewDone = false;
+app.use(async (_req, _res, next) => {
+  if (!renewDone) {
+    renewDone = true;
+    try {
+      const result = await autoRenewLeave();
+      if (result.updated > 0) console.log(`[연차 자동 갱신] ${result.updated}명 갱신`, result.details);
+    } catch (e) {
+      console.error("[연차 자동 갱신 실패]", e);
+    }
+  }
+  next();
+});
+
 if (process.env.VERCEL !== "1") {
+  // 로컬: 서버 시작 시 자동 갱신
+  autoRenewLeave()
+    .then((r) => { if (r.updated > 0) console.log(`[연차 자동 갱신] ${r.updated}명 갱신`, r.details); })
+    .catch((e) => console.error("[연차 자동 갱신 실패]", e));
+
   app.listen(PORT, () =>
     console.log(`서버 실행 중 → http://localhost:${PORT}  (관리자: /admin)`),
   );
