@@ -148,6 +148,28 @@
         퇴사자 포함
       </label>
     </div>
+
+    <!-- ��색 + 스마트 필터 -->
+    <div class="flex flex-col gap-3">
+      <input type="text" id="empSearch" oninput="renderEmployees()" placeholder="이름 또는 부서 검색..."
+             class="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:outline-none focus:border-blue-400 focus:bg-white transition"
+             style="background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%239ca3af%22 stroke-width=%222%22><circle cx=%2211%22 cy=%2211%22 r=%228%22/><line x1=%2221%22 y1=%2221%22 x2=%2216.65%22 y2=%2216.65%22/></svg>');background-repeat:no-repeat;background-position:right 12px center;" />
+      <div class="flex flex-wrap gap-2">
+        <button class="emp-filter-btn px-3 py-1.5 border-2 rounded-full text-xs font-semibold transition border-slate-200 bg-slate-50 text-slate-500" onclick="toggleEmpFilter('all',this)">전체</button>
+        <button class="emp-filter-btn px-3 py-1.5 border-2 rounded-full text-xs font-semibold transition border-slate-200 bg-slate-50 text-slate-500" onclick="toggleEmpFilter('lowUsage',this)">소진율 낮음</button>
+        <button class="emp-filter-btn px-3 py-1.5 border-2 rounded-full text-xs font-semibold transition border-slate-200 bg-slate-50 text-slate-500" onclick="toggleEmpFilter('underYear',this)">1년 미만자</button>
+        <button class="emp-filter-btn px-3 py-1.5 border-2 rounded-full text-xs font-semibold transition border-slate-200 bg-slate-50 text-slate-500" onclick="toggleEmpFilter('noRecent',this)">장기 미사용</button>
+        <span id="empFilterInfo" class="text-xs text-slate-400 self-center ml-1"></span>
+      </div>
+      <div class="flex flex-wrap gap-2 text-xs text-slate-400">
+        정렬:
+        <button onclick="setEmpSort('name')" class="emp-sort-btn hover:text-blue-600 transition font-semibold text-blue-600" data-key="name">이름</button>
+        <button onclick="setEmpSort('usedPct')" class="emp-sort-btn hover:text-blue-600 transition" data-key="usedPct">사용률</button>
+        <button onclick="setEmpSort('remaining')" class="emp-sort-btn hover:text-blue-600 transition" data-key="remaining">잔여</button>
+        <button onclick="setEmpSort('joined')" class="emp-sort-btn hover:text-blue-600 transition" data-key="joined">입사일</button>
+      </div>
+    </div>
+
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead><tr class="border-b-2 border-slate-100">
@@ -394,7 +416,13 @@
     ]);
     renderAll();
   }
-  function renderAll() { renderPending(); renderAllRequests(); renderEmployees(); document.getElementById('pendingCount').textContent=allRequests.filter(r=>r.status==='PENDING').length||''; }
+  function renderAll() {
+    renderPending(); renderAllRequests(); renderEmployees();
+    document.getElementById('pendingCount').textContent=allRequests.filter(r=>r.status==='PENDING').length||'';
+    // 직원 필터 "전체" 활성화
+    const allBtn = document.querySelector('.emp-filter-btn');
+    if(allBtn && empFilterMode==='all'){allBtn.style.borderColor='#60a5fa';allBtn.style.background='#eff6ff';allBtn.style.color='#1d4ed8';}
+  }
 
   // ── 승인 대기 ─────────────────────────────────────────────────────────────
   function renderPending() {
@@ -417,12 +445,86 @@
   }
 
   // ── 직원 현황 (이름 클릭 → 모달) ──────────────────────────────────────────
+  // ── 직원 필터/정렬/검색 ─────────────────────────────────────────────────────
+  let empFilterMode = 'all';
+  let empSortKey = 'name';
+  let empSortAsc = true;
+
+  function toggleEmpFilter(mode, el) {
+    empFilterMode = mode;
+    document.querySelectorAll('.emp-filter-btn').forEach(b=>{b.style.borderColor='#e2e8f0';b.style.background='#f8fafc';b.style.color='#64748b';});
+    if(el){el.style.borderColor='#60a5fa';el.style.background='#eff6ff';el.style.color='#1d4ed8';}
+    renderEmployees();
+  }
+
+  function setEmpSort(key) {
+    if (empSortKey === key) empSortAsc = !empSortAsc;
+    else { empSortKey = key; empSortAsc = true; }
+    document.querySelectorAll('.emp-sort-btn').forEach(b=>{b.classList.remove('text-blue-600','font-semibold');b.classList.add('text-slate-400');});
+    const btn = document.querySelector(`.emp-sort-btn[data-key="${key}"]`);
+    if(btn){btn.classList.add('text-blue-600','font-semibold');btn.classList.remove('text-slate-400');}
+    renderEmployees();
+  }
+
+  function getFilteredEmployees() {
+    const search = (document.getElementById('empSearch')?.value || '').toLowerCase().trim();
+    const now = new Date();
+    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth()-3, now.getDate()).toISOString().slice(0,10);
+
+    let list = [...employees];
+
+    // 검색
+    if (search) {
+      list = list.filter(e => e.name.toLowerCase().includes(search) || e.department.toLowerCase().includes(search));
+    }
+
+    // 스마트 필터
+    if (empFilterMode === 'lowUsage') {
+      list = list.filter(e => e.status==='ACTIVE' && e.totalDays > 0 && (e.usedDays / e.totalDays) < 0.3);
+    } else if (empFilterMode === 'underYear') {
+      const oneYearAgo = new Date(now.getFullYear()-1, now.getMonth(), now.getDate()).toISOString();
+      list = list.filter(e => e.status==='ACTIVE' && e.joinedAt > oneYearAgo);
+    } else if (empFilterMode === 'noRecent') {
+      list = list.filter(e => {
+        if (e.status !== 'ACTIVE') return false;
+        const recent = allRequests.find(r => r.employeeId === e.id && r.status === 'APPROVED' && r.date >= threeMonthsAgo);
+        return !recent;
+      });
+    }
+
+    // 정렬
+    list.sort((a,b) => {
+      let v = 0;
+      if (empSortKey === 'name') v = a.name.localeCompare(b.name);
+      else if (empSortKey === 'usedPct') v = (a.totalDays>0?a.usedDays/a.totalDays:0) - (b.totalDays>0?b.usedDays/b.totalDays:0);
+      else if (empSortKey === 'remaining') v = a.remainingDays - b.remainingDays;
+      else if (empSortKey === 'joined') v = (a.joinedAt||'').localeCompare(b.joinedAt||'');
+      return empSortAsc ? v : -v;
+    });
+
+    return list;
+  }
+
   function renderEmployees() {
-    document.getElementById('empBody').innerHTML = employees.map(e=>{
+    const list = getFilteredEmployees();
+    const infoEl = document.getElementById('empFilterInfo');
+    if (empFilterMode !== 'all' || (document.getElementById('empSearch')?.value||'').trim()) {
+      infoEl.textContent = `${list.length}명 표시`;
+    } else {
+      infoEl.textContent = '';
+    }
+
+    document.getElementById('empBody').innerHTML = list.map(e=>{
       const pct = e.totalDays>0 ? Math.round((e.usedDays/e.totalDays)*100) : 0;
       const isR = e.status==='RESIGNED';
-      return `<tr class="${isR?'row-resigned':''} border-b border-slate-100"><td class="px-3 py-3"><button onclick="openEmpModal('${e.id}')" class="font-semibold text-blue-600 hover:text-blue-800 hover:underline transition">${esc(e.name)}</button>${!e.hasPassword&&!isR?' <span class="text-[10px] text-red-400" title="비밀번호 미설정">🔑</span>':''}</td><td class="px-3 py-3 text-xs text-slate-500">${esc(e.department)}</td><td class="px-3 py-3">${isR?'<span class="px-2 py-0.5 rounded-full bg-slate-200 text-slate-500 text-xs font-semibold">퇴사</span>':'<span class="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-semibold">재직</span>'}</td><td class="px-3 py-3">${e.totalDays}일${e.carryOver>0?` <span class="text-xs text-blue-500">(이월 ${e.carryOver})</span>`:''}</td><td class="px-3 py-3 text-red-500 font-medium">${e.usedDays}일</td><td class="px-3 py-3 text-emerald-600 font-bold">${e.remainingDays}일</td><td class="px-3 py-3"><div class="flex items-center gap-2"><div class="w-20 h-1.5 bg-slate-200 rounded-full overflow-hidden"><div class="h-full rounded-full bg-gradient-to-r from-blue-400 to-blue-500" style="width:${pct}%"></div></div><span class="text-xs text-slate-400">${pct}%</span></div></td><td class="px-3 py-3"><div class="flex items-center gap-2 flex-wrap">${!isR?`<input type="number" id="tot-${e.id}" value="${e.totalDays}" min="1" class="w-16 px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-400 transition"/><button onclick="updateTotal('${e.id}')" class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white text-xs font-semibold rounded-lg transition">변경</button><button onclick="resignEmp('${e.id}','${esc(e.name)}')" class="px-3 py-1.5 bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 text-xs font-semibold rounded-lg transition">퇴사</button>`:`<button onclick="reinstateEmp('${e.id}','${esc(e.name)}')" class="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-semibold rounded-lg transition">복직</button><button onclick="deleteEmp('${e.id}','${esc(e.name)}')" class="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-600 text-xs font-semibold rounded-lg transition">삭제</button>`}</div></td></tr>`;
+      const lowRemain = !isR && e.remainingDays <= 3 && e.totalDays > 0;
+      const badges = [
+        !e.hasPassword&&!isR ? '<span class="text-[10px] text-red-400" title="비밀번호 미설정">🔑</span>' : '',
+        lowRemain ? '<span class="px-1.5 py-0.5 rounded bg-red-500 text-white text-[9px] font-bold ml-1">잔여주의</span>' : '',
+      ].join('');
+      return `<tr class="${isR?'row-resigned':''} border-b border-slate-100"><td class="px-3 py-3"><button onclick="openEmpModal('${e.id}')" class="font-semibold text-blue-600 hover:text-blue-800 hover:underline transition">${esc(e.name)}</button>${badges}</td><td class="px-3 py-3 text-xs text-slate-500">${esc(e.department)}</td><td class="px-3 py-3">${isR?'<span class="px-2 py-0.5 rounded-full bg-slate-200 text-slate-500 text-xs font-semibold">퇴사</span>':'<span class="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-semibold">재직</span>'}</td><td class="px-3 py-3">${e.totalDays}일${e.carryOver>0?` <span class="text-xs text-blue-500">(이월 ${e.carryOver})</span>`:''}</td><td class="px-3 py-3 text-red-500 font-medium">${e.usedDays}일</td><td class="px-3 py-3 text-emerald-600 font-bold">${e.remainingDays}일</td><td class="px-3 py-3"><div class="flex items-center gap-2"><div class="w-20 h-1.5 bg-slate-200 rounded-full overflow-hidden"><div class="h-full rounded-full bg-gradient-to-r from-blue-400 to-blue-500" style="width:${pct}%"></div></div><span class="text-xs text-slate-400">${pct}%</span></div></td><td class="px-3 py-3"><div class="flex items-center gap-2 flex-wrap">${!isR?`<input type="number" id="tot-${e.id}" value="${e.totalDays}" min="1" class="w-16 px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-400 transition"/><button onclick="updateTotal('${e.id}')" class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white text-xs font-semibold rounded-lg transition">변경</button><button onclick="resignEmp('${e.id}','${esc(e.name)}')" class="px-3 py-1.5 bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 text-xs font-semibold rounded-lg transition">퇴사</button>`:`<button onclick="reinstateEmp('${e.id}','${esc(e.name)}')" class="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-semibold rounded-lg transition">복직</button><button onclick="deleteEmp('${e.id}','${esc(e.name)}')" class="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-600 text-xs font-semibold rounded-lg transition">삭제</button>`}</div></td></tr>`;
     }).join('');
+    if(!list.length) document.getElementById('empBody').innerHTML = '<tr><td colspan="8" class="text-center text-slate-400 py-8">조건에 맞는 직원이 없습니다.</td></tr>';
   }
 
   // ── 직원 상세 모달 ─────────────────────────────────────────────────────────
