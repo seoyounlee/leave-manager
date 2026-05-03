@@ -44,7 +44,7 @@ app.get("/admin", (_req, res) => {
 
 // ─── 헬퍼 ──────────────────────────────────────────────────────────────────
 
-const VALID_TYPES: LeaveType[] = ["FULL", "HALF_AM", "HALF_PM"];
+const VALID_TYPES: LeaveType[] = ["FULL", "HALF_AM", "HALF_PM", "TIME_1H", "TIME_2H", "TIME_3H", "SUPPORT_2H"];
 
 function isValidDate(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(Date.parse(s));

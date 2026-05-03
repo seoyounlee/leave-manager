@@ -61,6 +61,10 @@ enum LeaveType {
   FULL
   HALF_AM
   HALF_PM
+  TIME_1H
+  TIME_2H
+  TIME_3H
+  SUPPORT_2H
 }
 
 enum Status {

@@ -3,13 +3,17 @@ import type { Employee, LeaveYear, LeaveRequest } from "@prisma/client";
 
 // ─── 타입 ──────────────────────────────────────────────────────────────────
 
-export type LeaveType = "FULL" | "HALF_AM" | "HALF_PM";
+export type LeaveType = "FULL" | "HALF_AM" | "HALF_PM" | "TIME_1H" | "TIME_2H" | "TIME_3H" | "SUPPORT_2H";
 export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 export const LEAVE_TYPE_KO: Record<LeaveType, string> = {
   FULL: "종일",
   HALF_AM: "오전반차",
   HALF_PM: "오후반차",
+  TIME_1H: "시간차(1h)",
+  TIME_2H: "시간차(2h)",
+  TIME_3H: "시간차(3h)",
+  SUPPORT_2H: "지원대휴(2h)",
 };
 
 export const STATUS_KO: Record<RequestStatus, string> = {
@@ -22,6 +26,10 @@ const DAYS_BY_TYPE: Record<LeaveType, number> = {
   FULL: 1,
   HALF_AM: 0.5,
   HALF_PM: 0.5,
+  TIME_1H: 0.125,
+  TIME_2H: 0.25,
+  TIME_3H: 0.375,
+  SUPPORT_2H: 0.25,
 };
 
 export interface EmployeeWithYear {
