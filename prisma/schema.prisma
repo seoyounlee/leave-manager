@@ -103,3 +103,8 @@ enum Status {
   APPROVED
   REJECTED
 }
+
+model SystemSetting {
+  key   String @id
+  value String
+}

@@ -43,7 +43,11 @@
 
   <div class="flex items-center justify-between">
     <h1 class="text-2xl font-bold text-slate-800">🗂️ 연차 관리 · 관리자</h1>
-    <button onclick="doLogout()" class="text-xs text-slate-400 hover:text-red-500 transition px-3 py-1.5 rounded-lg hover:bg-red-50 font-medium">🔓 로그아웃</button>
+    <div class="flex items-center gap-2">
+      <button onclick="downloadBackup()" class="text-xs text-slate-400 hover:text-emerald-600 transition px-3 py-1.5 rounded-lg hover:bg-emerald-50 font-medium">💾 백업</button>
+      <button onclick="showPwChange()" class="text-xs text-slate-400 hover:text-blue-600 transition px-3 py-1.5 rounded-lg hover:bg-blue-50 font-medium">⚙️ 설정</button>
+      <button onclick="doLogout()" class="text-xs text-slate-400 hover:text-red-500 transition px-3 py-1.5 rounded-lg hover:bg-red-50 font-medium">🔓 로그아웃</button>
+    </div>
   </div>
 
   <!-- 조회 연도 + 관리 액션 -->
@@ -235,6 +239,30 @@
   <a href="/" class="text-center text-slate-400 text-xs hover:text-blue-400 transition mt-1 pb-2">→ 직원 신청 페이지</a>
 </div>
 
+<!-- 비밀번호 변경 모달 -->
+<div id="pwChangeModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-8 flex flex-col gap-4 animate-fade-up">
+    <h2 class="text-lg font-bold text-slate-800">관리자 비밀번호 변경</h2>
+    <div>
+      <label class="text-xs font-medium text-slate-500 mb-1 block">현재 비밀번호</label>
+      <input type="password" id="pwCurr" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition" />
+    </div>
+    <div>
+      <label class="text-xs font-medium text-slate-500 mb-1 block">새 비밀번호</label>
+      <input type="password" id="pwNew" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition" />
+    </div>
+    <div>
+      <label class="text-xs font-medium text-slate-500 mb-1 block">새 비밀번호 확인</label>
+      <input type="password" id="pwConfirm" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:border-blue-400 transition" />
+    </div>
+    <div class="flex gap-3">
+      <button onclick="doChangePw()" class="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold rounded-xl transition">변경</button>
+      <button onclick="document.getElementById('pwChangeModal').style.display='none'" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition">취소</button>
+    </div>
+    <p id="pwChangeMsg" class="text-sm text-center min-h-[18px]"></p>
+  </div>
+</div>
+
 <!-- 재량연차 부여 모달 -->
 <div id="grantModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" style="display:none" onclick="if(event.target===this)closeGrantModal()">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-8 flex flex-col gap-5 animate-fade-up">
@@ -412,31 +440,49 @@
 </style>
 
 <script>
-  const API = '/api', PW_KEY = 'adminPw';
+  const API = '/api', TOKEN_KEY = 'adminToken';
   let allFilter = 'all', allRequests = [], employees = [];
   let selectedYear = new Date().getFullYear();
   let modalEmpId = null;
+  let logoutTimer = null;
 
-  function savedPw() { return sessionStorage.getItem(PW_KEY) ?? ''; }
-  function adminHeaders(extra={}) { return { 'Content-Type':'application/json', 'X-Admin-Password': savedPw(), ...extra }; }
+  function savedToken() { return sessionStorage.getItem(TOKEN_KEY) ?? ''; }
+  function adminHeaders(extra={}) { return { 'Content-Type':'application/json', 'Authorization': 'Bearer ' + savedToken(), ...extra }; }
 
-  // ── 인증 ──────────────────────────────────────────────────────────────────
+  // ── JWT 인증 ──────────────────────────────────────────────────────────────
   async function doLogin() {
     const pw = document.getElementById('pwInput').value;
     const errEl = document.getElementById('loginErr');
     errEl.textContent = '';
     if (!pw) { errEl.textContent = '비밀번호를 입력해주세요.'; return; }
     const res = await fetch(`${API}/auth/login`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw}) });
-    if (!res.ok) { errEl.textContent = '비밀번호가 올바르지 않습니다.'; document.getElementById('pwInput').value = ''; return; }
-    sessionStorage.setItem(PW_KEY, pw);
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || '비밀번호가 올바르지 않습니다.'; document.getElementById('pwInput').value = ''; return; }
+    sessionStorage.setItem(TOKEN_KEY, data.token);
+    startAutoLogout(data.expiresIn || 3600);
     document.getElementById('loginOverlay').style.display = 'none';
     initApp();
   }
-  function doLogout() { sessionStorage.removeItem(PW_KEY); document.getElementById('pwInput').value=''; document.getElementById('loginOverlay').style.display='flex'; }
+  function doLogout() {
+    sessionStorage.removeItem(TOKEN_KEY);
+    if (logoutTimer) clearTimeout(logoutTimer);
+    document.getElementById('pwInput').value='';
+    document.getElementById('loginOverlay').style.display='flex';
+  }
+  function startAutoLogout(sec) {
+    if (logoutTimer) clearTimeout(logoutTimer);
+    logoutTimer = setTimeout(() => { alert('세션이 만료되었습니다. 다시 로그인해주세요.'); doLogout(); }, sec * 1000);
+  }
+  // 페이지 로드 시 토큰 검증
   (async()=>{
-    const pw=savedPw(); if(!pw)return;
-    const res=await fetch(`${API}/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
-    if(res.ok){document.getElementById('loginOverlay').style.display='none';initApp();}else{sessionStorage.removeItem(PW_KEY);}
+    const token = savedToken(); if(!token) return;
+    const res = await fetch(`${API}/auth/verify`, { headers: { 'Authorization': 'Bearer ' + token } });
+    if(res.ok){
+      document.getElementById('loginOverlay').style.display='none';
+      // 남은 시간 추정 (최대 1시간)
+      startAutoLogout(3600);
+      initApp();
+    } else { sessionStorage.removeItem(TOKEN_KEY); }
   })();
 
   // ── 초기화 / 데이터 ───────────────────────────────────────────────────────
@@ -935,6 +981,40 @@
   function tcDotCls(type, isPending) {
     if (isPending) return 'bg-yellow-400 border border-yellow-500';
     return {FULL:'bg-blue-500',HALF_AM:'bg-orange-400',HALF_PM:'bg-purple-400',TIME_1H:'bg-teal-500',TIME_2H:'bg-teal-500',TIME_3H:'bg-teal-500',SUPPORT_2H:'bg-pink-500'}[type] ?? 'bg-slate-400';
+  }
+
+  // ── 백업 다운로드 ──────────────────────────────────────────────────────────
+  async function downloadBackup() {
+    const res = await fetch(`${API}/backup`, { headers: { 'Authorization': 'Bearer ' + savedToken() } });
+    if (res.status === 401) { doLogout(); return; }
+    if (!res.ok) { alert('백업 실패'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), { href: url, download: `leave-manager-backup-${new Date().toISOString().slice(0,10)}.json` });
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+
+  // ── 비밀번호 변경 ─────────────────────────────────────────────────────────
+  function showPwChange() {
+    ['pwCurr','pwNew','pwConfirm'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('pwChangeMsg').textContent = '';
+    document.getElementById('pwChangeModal').style.display = 'flex';
+  }
+  async function doChangePw() {
+    const curr = document.getElementById('pwCurr').value;
+    const newPw = document.getElementById('pwNew').value;
+    const confirm = document.getElementById('pwConfirm').value;
+    const msgEl = document.getElementById('pwChangeMsg');
+    if (!curr || !newPw) { msgEl.textContent = '모든 필드를 입력하세요'; msgEl.className = 'text-sm text-red-500 text-center'; return; }
+    if (newPw !== confirm) { msgEl.textContent = '새 비밀번호가 일치하지 않습니다'; msgEl.className = 'text-sm text-red-500 text-center'; return; }
+    const res = await fetch(`${API}/auth/change-password`, {
+      method: 'POST', headers: adminHeaders(),
+      body: JSON.stringify({ currentPassword: curr, newPassword: newPw }),
+    });
+    const data = await res.json();
+    if (!res.ok) { msgEl.textContent = data.error; msgEl.className = 'text-sm text-red-500 text-center'; return; }
+    msgEl.textContent = '비밀번호가 변경되었습니다. 다시 로그인해주세요.'; msgEl.className = 'text-sm text-green-600 text-center';
+    setTimeout(doLogout, 2000);
   }
 
   // ── D-30 갱신 카운트다운 ─────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import path from "path";
+import jwt from "jsonwebtoken";
 import { Parser as CsvParser } from "json2csv";
 import {
   getEmployees,
@@ -36,11 +37,12 @@ import {
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-if (!ADMIN_PASSWORD) {
+const ENV_PASSWORD = process.env.ADMIN_PASSWORD;
+if (!ENV_PASSWORD) {
   console.error("환경 변수 ADMIN_PASSWORD가 설정되지 않았습니다.");
   process.exit(1);
 }
+const JWT_SECRET = process.env.JWT_SECRET || ENV_PASSWORD + "_jwt_secret";
 
 app.use(cors());
 app.use(express.json());
@@ -58,24 +60,93 @@ function isValidDate(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(Date.parse(s));
 }
 
-function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  const pw = req.headers["x-admin-password"] as string | undefined;
-  if (!pw || pw !== ADMIN_PASSWORD) {
-    res.status(401).json({ error: "관리자 비밀번호가 올바르지 않습니다." });
-    return;
-  }
-  next();
+async function getAdminPassword(): Promise<string> {
+  const { prisma } = await import("./db");
+  const setting = await prisma.systemSetting.findUnique({ where: { key: "adminPassword" } });
+  return setting?.value ?? ENV_PASSWORD!;
 }
 
-// ─── 인증 ──────────────────────────────────────────────────────────────────
+function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+  // JWT 방식
+  if (authHeader?.startsWith("Bearer ")) {
+    try {
+      jwt.verify(authHeader.slice(7), JWT_SECRET);
+      next();
+      return;
+    } catch {
+      res.status(401).json({ error: "세션이 만료되었습니다. 다시 로그인해주세요." });
+      return;
+    }
+  }
+  // 레거시 헤더 방식 (호환)
+  const pw = req.headers["x-admin-password"] as string | undefined;
+  if (pw) {
+    getAdminPassword().then((adminPw) => {
+      if (pw === adminPw) next();
+      else res.status(401).json({ error: "관리자 비밀번호가 올바르지 않습니다." });
+    });
+    return;
+  }
+  res.status(401).json({ error: "인증이 필요합니다." });
+}
 
-app.post("/api/auth/login", (req, res) => {
+// ─── 인증 (JWT) ─────────────────────────────────────────────────────────────
+
+app.post("/api/auth/login", async (req, res) => {
   const { password } = req.body as { password?: string };
-  if (!password || password !== ADMIN_PASSWORD) {
+  if (!password) { res.status(401).json({ error: "비밀번호를 입력해주세요." }); return; }
+  const adminPw = await getAdminPassword();
+  if (password !== adminPw) {
     res.status(401).json({ error: "비밀번호가 올바르지 않습니다." });
     return;
   }
+  const token = jwt.sign({ role: "admin" }, JWT_SECRET, { expiresIn: "1h" });
+  res.json({ ok: true, token, expiresIn: 3600 });
+});
+
+app.post("/api/auth/change-password", requireAdmin, async (req, res) => {
+  const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: "현재 비밀번호와 새 비밀번호를 입력해주세요." }); return;
+  }
+  if (newPassword.length < 4) {
+    res.status(400).json({ error: "새 비밀번호는 4자 이상이어야 합니다." }); return;
+  }
+  const adminPw = await getAdminPassword();
+  if (currentPassword !== adminPw) {
+    res.status(401).json({ error: "현재 비밀번호가 올바르지 않습니다." }); return;
+  }
+  const { prisma } = await import("./db");
+  await prisma.systemSetting.upsert({
+    where: { key: "adminPassword" },
+    update: { value: newPassword },
+    create: { key: "adminPassword", value: newPassword },
+  });
   res.json({ ok: true });
+});
+
+app.get("/api/auth/verify", requireAdmin, (_req, res) => {
+  res.json({ ok: true });
+});
+
+// ─── 데이터 백업 ─────────────────────────────────────────────────────────────
+
+app.get("/api/backup", requireAdmin, async (_req, res) => {
+  const { prisma } = await import("./db");
+  const [employees, leaveYears, leaveRequests, promotions, settings] = await Promise.all([
+    prisma.employee.findMany(),
+    prisma.leaveYear.findMany(),
+    prisma.leaveRequest.findMany(),
+    prisma.leavePromotion.findMany(),
+    prisma.systemSetting.findMany(),
+  ]);
+  const backup = { exportedAt: new Date().toISOString(), employees, leaveYears, leaveRequests, promotions, settings };
+  const json = JSON.stringify(backup, null, 2);
+  const today = new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(`leave-manager-backup-${today}`)}.json`);
+  res.send(json);
 });
 
 // ─── 연도 목록 ──────────────────────────────────────────────────────────────
