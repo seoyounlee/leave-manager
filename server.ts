@@ -28,8 +28,6 @@ import {
   getPromotions,
   confirmPromotion,
   resetPromotionStatus,
-  setEmployeePassword,
-  verifyEmployeePassword,
   LEAVE_TYPE_KO,
   STATUS_KO,
   LeaveType,
@@ -161,21 +159,6 @@ app.patch("/api/employees/:id/memo", requireAdmin, async (req, res) => {
   }
 });
 
-// ─── 직원 비밀번호 설정 ──────────────────────────────────────────────────────
-
-app.patch("/api/employees/:id/password", requireAdmin, async (req, res) => {
-  const { password } = req.body as { password?: string };
-  if (!password || !password.trim()) {
-    res.status(400).json({ error: "비밀번호를 입력해주세요." });
-    return;
-  }
-  try {
-    await setEmployeePassword(req.params.id as string, password.trim());
-    res.json({ ok: true });
-  } catch (e: unknown) {
-    res.status(400).json({ error: (e as Error).message });
-  }
-});
 
 // ─── 퇴사 / 복직 ──────────────────────────────────────────────────────────
 
@@ -296,18 +279,13 @@ app.patch("/api/employees/:id/promotion-reset", requireAdmin, async (req, res) =
 // ─── 연차 신청 ──────────────────────────────────────────────────────────────
 
 app.post("/api/requests", async (req, res) => {
-  const { employeeId, date, type, reason, password } = req.body as {
+  const { employeeId, date, type, reason } = req.body as {
     employeeId?: string;
     date?: string;
     type?: string;
     reason?: string;
-    password?: string;
   };
 
-  if (!password) {
-    res.status(401).json({ error: "비밀번호를 입력해주세요." });
-    return;
-  }
   if (!employeeId) {
     res.status(400).json({ error: "employeeId는 필수입니다." });
     return;
@@ -326,15 +304,6 @@ app.post("/api/requests", async (req, res) => {
   }
 
   try {
-    // 비밀번호 검증: 관리자 비밀번호 또는 해당 직원 비밀번호
-    if (password !== ADMIN_PASSWORD) {
-      const valid = await verifyEmployeePassword(employeeId, password);
-      if (!valid) {
-        res.status(401).json({ error: "비밀번호가 올바르지 않습니다." });
-        return;
-      }
-    }
-
     const requests = await submitRequest(employeeId, {
       date,
       type: type as LeaveType,
