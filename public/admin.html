@@ -55,6 +55,25 @@
     </div>
   </div>
 
+  <!-- 통계 카드 -->
+  <div class="grid grid-cols-3 gap-4" id="statsCards">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex flex-col gap-1">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">전체 소진율</p>
+      <p class="text-3xl font-extrabold text-blue-600" id="statUsageRate">—</p>
+      <p class="text-[11px] text-slate-400" id="statUsageSub"></p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex flex-col gap-1">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">이번 달 연차 예정</p>
+      <p class="text-3xl font-extrabold text-emerald-600" id="statMonthCount">—</p>
+      <p class="text-[11px] text-slate-400" id="statMonthSub"></p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex flex-col gap-1">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">촉진 필요</p>
+      <p class="text-3xl font-extrabold text-red-500" id="statPromoCount">—</p>
+      <p class="text-[11px] text-slate-400" id="statPromoSub"></p>
+    </div>
+  </div>
+
   <!-- 탭 -->
   <div class="flex gap-1 bg-slate-200 rounded-xl p-1">
     <button class="tab-btn flex-1 py-2 rounded-lg text-sm font-semibold transition active" onclick="switchTab('pending')">승인 대기 <span id="pendingCount" class="text-red-500 font-bold"></span></button>
@@ -72,14 +91,14 @@
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead><tr class="border-b-2 border-slate-100">
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold whitespace-nowrap">신청일</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">직원</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold whitespace-nowrap">날짜</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">종류</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">일수</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">사유</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">메모</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">처리</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider whitespace-nowrap">신청일</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">직원</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider whitespace-nowrap">날짜</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">종류</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">일수</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">사유</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">메모</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">처리</th>
         </tr></thead>
         <tbody id="pendingBody"></tbody>
       </table>
@@ -104,15 +123,15 @@
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead><tr class="border-b-2 border-slate-100">
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold whitespace-nowrap">신청일</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">직원</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold whitespace-nowrap">날짜</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">종류</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">일수</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">사유</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">상태</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">메모</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">처리</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider whitespace-nowrap">신청일</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">직원</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider whitespace-nowrap">날짜</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">종류</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">일수</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">사유</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">상태</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">메모</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">처리</th>
         </tr></thead>
         <tbody id="allBody"></tbody>
       </table>
@@ -174,14 +193,14 @@
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead><tr class="border-b-2 border-slate-100">
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">이름</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">부서</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">상태</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">총 연차</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">사용</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">잔여</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">사용률</th>
-          <th class="text-left px-3 py-2 text-slate-400 font-semibold">관리</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">이름</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">부서</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">상태</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">총 연차</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">사용</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">잔여</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">사용률</th>
+          <th class="text-left px-3 py-2 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">관리</th>
         </tr></thead>
         <tbody id="empBody"></tbody>
       </table>
@@ -366,10 +385,21 @@
   .tab-btn { color: #64748b; }
   .tab-btn.active { background: #fff; color: #1d4ed8; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
   .filter-btn.active { border-color: #60a5fa; background: #eff6ff; color: #1d4ed8; }
-  tbody tr:hover td { background: #f8fafc; }
-  tbody tr.row-pending td { background: #fefce8; }
-  tbody tr.row-pending:hover td { background: #fef9c3; }
-  tbody tr.row-resigned td { opacity: .5; }
+
+  /* 테이블 프로페셔널 스타일 */
+  table { border-collapse: separate; border-spacing: 0; }
+  thead th { position: sticky; top: 0; background: #f8fafc; z-index: 1; border-bottom: 2px solid #e2e8f0; }
+  tbody tr { transition: background .15s; }
+  tbody tr:hover { background: #f1f5f9; }
+  tbody tr td { border-bottom: 1px solid #f1f5f9; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr.row-pending { background: #fefce8; }
+  tbody tr.row-pending:hover { background: #fef9c3; }
+  tbody tr.row-resigned { opacity: .5; }
+
+  /* 통계 카드 hover */
+  #statsCards > div { transition: transform .2s, box-shadow .2s; }
+  #statsCards > div:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
 </style>
 
 <script>
@@ -418,11 +448,33 @@
     renderAll();
   }
   function renderAll() {
-    renderPending(); renderAllRequests(); renderEmployees();
+    renderPending(); renderAllRequests(); renderEmployees(); renderStats();
     document.getElementById('pendingCount').textContent=allRequests.filter(r=>r.status==='PENDING').length||'';
-    // 직원 필터 "전체" 활성화
     const allBtn = document.querySelector('.emp-filter-btn');
     if(allBtn && empFilterMode==='all'){allBtn.style.borderColor='#60a5fa';allBtn.style.background='#eff6ff';allBtn.style.color='#1d4ed8';}
+  }
+
+  function renderStats() {
+    const active = employees.filter(e=>e.status==='ACTIVE');
+
+    // 1) 전체 소진율
+    const totalAll = active.reduce((s,e)=>s+e.totalDays,0);
+    const usedAll = active.reduce((s,e)=>s+e.usedDays,0);
+    const pct = totalAll > 0 ? Math.round((usedAll/totalAll)*100) : 0;
+    document.getElementById('statUsageRate').textContent = pct + '%';
+    document.getElementById('statUsageSub').textContent = `${active.length}명 · 총 ${totalAll}일 중 ${usedAll}일 사용`;
+
+    // 2) 이번 달 연차 예정
+    const ym = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
+    const monthReqs = allRequests.filter(r=>r.date.startsWith(ym) && (r.status==='APPROVED'||r.status==='PENDING'));
+    const monthNames = [...new Set(monthReqs.map(r=>r.employeeName))];
+    document.getElementById('statMonthCount').textContent = monthNames.length + '명';
+    document.getElementById('statMonthSub').textContent = monthReqs.length + '건 (승인+대기)';
+
+    // 3) 촉진 필요 (소진율 30% 미만 + 재직)
+    const promoNeeded = active.filter(e=>e.totalDays>0 && (e.usedDays/e.totalDays)<0.3 && e.promotionStatus==='NONE');
+    document.getElementById('statPromoCount').textContent = promoNeeded.length + '명';
+    document.getElementById('statPromoSub').textContent = '소진율 30% 미만 · 미촉진';
   }
 
   // ── 승인 대기 ─────────────────────────────────────────────────────────────
