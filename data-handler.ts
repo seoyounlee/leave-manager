@@ -80,6 +80,7 @@ export interface RequestView {
   createdAt: string;
   reviewedAt: string | null;
   reviewNote: string | null;
+  calendarSynced: boolean;
 }
 
 // ─── 헬퍼 ──────────────────────────────────────────────────────────────────
@@ -174,6 +175,7 @@ function toRequestView(req: LeaveRequest & { employee: { name: string } }): Requ
     createdAt: req.createdAt.toISOString(),
     reviewedAt: req.reviewedAt?.toISOString() ?? null,
     reviewNote: req.reviewNote ?? null,
+    calendarSynced: !!req.googleEventId,
   };
 }
 
@@ -834,6 +836,9 @@ export async function approveRequest(
     throw new Error(`잔여 연차(${remaining}일)가 부족합니다. (신청: ${req.days}일)`);
   }
 
+  // 직원 이름 조회
+  const emp = await prisma.employee.findUnique({ where: { id: req.employeeId } });
+
   await prisma.$transaction([
     prisma.leaveRequest.update({
       where: { id: requestId },
@@ -845,8 +850,22 @@ export async function approveRequest(
     }),
   ]);
 
+  // Google Calendar 이벤트 생성 (실패해도 승인은 유지)
+  let gcalError: string | null = null;
+  try {
+    const { createCalendarEvent } = await import("./gcal");
+    const eventId = await createCalendarEvent(emp?.name ?? "Unknown", req.date, req.type, req.reason);
+    if (eventId) {
+      await prisma.leaveRequest.update({ where: { id: requestId }, data: { googleEventId: eventId } });
+    }
+  } catch (e) {
+    gcalError = (e as Error).message;
+    console.error("[GCal] 승인 후 캘린더 등록 실패:", gcalError);
+  }
+
   const y = req.year;
-  return { employees: await getEmployees(y), requests: await getRequests({ year: y }) };
+  const result = { employees: await getEmployees(y), requests: await getRequests({ year: y }), gcalError };
+  return result as { employees: EmployeeWithYear[]; requests: RequestView[]; gcalError?: string };
 }
 
 // ─── 반려 ──────────────────────────────────────────────────────────────────
@@ -885,11 +904,21 @@ export async function cancelApproved(
     where: { employeeId_year: { employeeId: req.employeeId, year: req.year } },
   });
 
+  // Google Calendar 이벤트 삭제
+  if (req.googleEventId) {
+    try {
+      const { deleteCalendarEvent } = await import("./gcal");
+      await deleteCalendarEvent(req.googleEventId);
+    } catch (e) {
+      console.error("[GCal] 캘린더 이벤트 삭제 실패:", (e as Error).message);
+    }
+  }
+
   if (ly) {
     await prisma.$transaction([
       prisma.leaveRequest.update({
         where: { id: requestId },
-        data: { status: "REJECTED", reviewedAt: new Date(), reviewNote: "관리자 승인 취소" },
+        data: { status: "REJECTED", reviewedAt: new Date(), reviewNote: "관리자 승인 취소", googleEventId: null },
       }),
       prisma.leaveYear.update({
         where: { id: ly.id },
@@ -899,7 +928,7 @@ export async function cancelApproved(
   } else {
     await prisma.leaveRequest.update({
       where: { id: requestId },
-      data: { status: "REJECTED", reviewedAt: new Date(), reviewNote: "관리자 승인 취소" },
+      data: { status: "REJECTED", reviewedAt: new Date(), reviewNote: "관리자 승인 취소", googleEventId: null },
     });
   }
 

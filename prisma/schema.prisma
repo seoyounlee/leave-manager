@@ -71,9 +71,10 @@ model LeaveRequest {
   year       Int
   reason     String
   status     Status    @default(PENDING)
-  reviewNote String?
-  createdAt  DateTime  @default(now())
-  reviewedAt DateTime?
+  reviewNote    String?
+  googleEventId String?
+  createdAt     DateTime  @default(now())
+  reviewedAt    DateTime?
 }
 
 model LeavePromotion {

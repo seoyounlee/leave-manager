@@ -9,6 +9,6 @@
     "resolveJsonModule": true,
     "skipLibCheck": true
   },
-  "include": ["server.ts", "data-handler.ts", "db.ts"],
+  "include": ["server.ts", "data-handler.ts", "db.ts", "gcal.ts"],
   "exclude": ["node_modules", "dist", "prisma.config.ts"]
 }

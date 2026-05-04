@@ -130,6 +130,11 @@ app.get("/api/auth/verify", requireAdmin, (_req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/api/calendar-status", (_req, res) => {
+  const { isCalendarEnabled } = require("./gcal");
+  res.json({ enabled: isCalendarEnabled() });
+});
+
 // ─── 데이터 백업 ─────────────────────────────────────────────────────────────
 
 app.get("/api/backup", requireAdmin, async (_req, res) => {
@@ -410,7 +415,8 @@ app.get("/api/requests", async (req, res) => {
 app.patch("/api/requests/:id/approve", requireAdmin, async (req, res) => {
   const { note } = req.body as { note?: string };
   try {
-    res.json(await approveRequest(req.params.id as string, note));
+    const result = await approveRequest(req.params.id as string, note);
+    res.json(result);
   } catch (e: unknown) {
     res.status(400).json({ error: (e as Error).message });
   }
