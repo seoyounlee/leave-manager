@@ -14,6 +14,7 @@ import {
   approveRequest,
   rejectRequest,
   cancelApproved,
+  deleteRequest,
   resignEmployee,
   reinstateEmployee,
   deleteEmployee,
@@ -434,6 +435,14 @@ app.patch("/api/requests/:id/reject", requireAdmin, async (req, res) => {
 app.patch("/api/requests/:id/cancel", requireAdmin, async (req, res) => {
   try {
     res.json(await cancelApproved(req.params.id as string));
+  } catch (e: unknown) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+app.delete("/api/requests/:id", requireAdmin, async (req, res) => {
+  try {
+    res.json(await deleteRequest(req.params.id as string));
   } catch (e: unknown) {
     res.status(400).json({ error: (e as Error).message });
   }

@@ -963,6 +963,42 @@ export async function cancelApproved(
   return { employees: await getEmployees(y), requests: await getRequests({ year: y }) };
 }
 
+// ─── 신청 삭제 ──────────────────────────────────────────────────────────────
+
+export async function deleteRequest(
+  requestId: string,
+): Promise<{ employees: EmployeeWithYear[]; requests: RequestView[] }> {
+  const req = await prisma.leaveRequest.findUnique({ where: { id: requestId } });
+  if (!req) throw new Error("신청 내역을 찾을 수 없습니다.");
+
+  // 승인된 건이면 usedDays 복원
+  if (req.status === "APPROVED") {
+    const ly = await prisma.leaveYear.findUnique({
+      where: { employeeId_year: { employeeId: req.employeeId, year: req.year } },
+    });
+    if (ly) {
+      await prisma.leaveYear.update({
+        where: { id: ly.id },
+        data: { usedDays: round1(Math.max(0, ly.usedDays - req.days)) },
+      });
+    }
+    // 캘린더 이벤트 삭제
+    if (req.googleEventId) {
+      try {
+        const { deleteCalendarEvent } = await import("./gcal");
+        await deleteCalendarEvent(req.googleEventId);
+      } catch (e) {
+        console.error("[GCal] 삭제 실패:", (e as Error).message);
+      }
+    }
+  }
+
+  await prisma.leaveRequest.delete({ where: { id: requestId } });
+
+  const y = parseInt(req.date.slice(0, 4));
+  return { employees: await getEmployees(y), requests: await getRequests({ year: y }) };
+}
+
 // ─── 연차 촉진 ──────────────────────────────────────────────────────────────
 
 export async function createPromotion(
