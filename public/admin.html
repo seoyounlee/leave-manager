@@ -681,11 +681,19 @@
     document.getElementById('emGrantHistory').textContent = emp.leaveNote || '';
     // 촉진 데이터 로드
     loadPromotions(id);
-    // 해당 직원 내역 로드
-    const reqs = await fetch(`${API}/requests?employeeId=${id}&year=${selectedYear}`).then(r=>r.json());
+    // 해당 직원 전체 내역 로드 (연도 제한 없음)
+    const reqs = await fetch(`${API}/requests?employeeId=${id}`).then(r=>r.json());
     const el = document.getElementById('emReqList');
     if(!reqs.length){el.innerHTML='<p class="text-sm text-slate-300 text-center py-4">신청 내역이 없습니다.</p>';return;}
-    el.innerHTML = reqs.map(r=>`<div class="flex items-center justify-between gap-3 border border-slate-100 rounded-lg px-4 py-2.5"><div class="flex items-center gap-2 flex-wrap"><span class="text-sm font-medium text-slate-700">${r.date}</span><span class="${typeBadgeCls(r.type)} px-2 py-0.5 rounded-full text-xs font-semibold">${labelType(r.type)}</span><span class="text-xs text-slate-400">${r.days}일</span><span class="text-xs text-slate-400 truncate max-w-[120px]">${esc(r.reason)}</span></div><span class="${statusBadgeCls(r.status)} px-2 py-0.5 rounded-full text-xs font-semibold">${labelStatus(r.status)}</span></div>`).join('');
+    // 연도별 그룹핑
+    const byYear = {};
+    reqs.forEach(r => { const yr = r.date.slice(0,4); (byYear[yr] = byYear[yr] || []).push(r); });
+    const years = Object.keys(byYear).sort((a,b) => b.localeCompare(a));
+    el.innerHTML = years.map(yr => {
+      const items = byYear[yr];
+      return `<div class="mb-2"><p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">${yr}년 (${items.length}건)</p>` +
+        items.map(r => `<div class="flex items-center justify-between gap-3 border border-slate-100 rounded-lg px-4 py-2.5 mb-1"><div class="flex items-center gap-2 flex-wrap"><span class="text-sm font-medium text-slate-700">${r.date}</span><span class="${typeBadgeCls(r.type)} px-2 py-0.5 rounded-full text-xs font-semibold">${labelType(r.type)}</span><span class="text-xs text-slate-400">${r.days}일</span><span class="text-xs text-slate-400 truncate max-w-[120px]">${esc(r.reason)}</span></div><div class="flex items-center gap-1.5"><span class="px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 text-[10px] font-medium">${r.bucketLabel||''}</span><span class="${statusBadgeCls(r.status)} px-2 py-0.5 rounded-full text-xs font-semibold">${labelStatus(r.status)}</span>${r.calendarSynced?'<span class="text-[10px] text-green-500">📅</span>':''}</div></div>`).join('') + '</div>';
+    }).join('');
   }
   function closeEmpModal(){ document.getElementById('empModal').style.display='none'; modalEmpId=null; }
 
