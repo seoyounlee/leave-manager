@@ -135,6 +135,17 @@ function calcBucketDates(joinedAt: Date, year: number): { startDate: string; end
   return { startDate: start, endDate: endD.toISOString().slice(0, 10) };
 }
 
+/**
+ * 오늘이 속하는 버킷의 시작 연도 계산
+ */
+function calcBucketYear(joinedAt: Date, ref: Date = new Date()): number {
+  const join = new Date(joinedAt);
+  const annivThisYear = new Date(join);
+  annivThisYear.setFullYear(ref.getFullYear());
+  if (ref >= annivThisYear) return ref.getFullYear();
+  return ref.getFullYear() - 1;
+}
+
 function toEmployeeView(emp: Employee, ly: LeaveYear | null): EmployeeWithYear {
   const total = ly?.totalDays ?? 0;
   const used = ly?.usedDays ?? 0;
@@ -305,38 +316,42 @@ export async function autoRenewLeave(): Promise<{ updated: number; skipped: numb
 
   for (const emp of activeEmps) {
     const legalDays = calcLegalLeaveDays(emp.joinedAt, now);
-    const thisYearLy = emp.leaveYears.find((l) => l.year === y);
-    const lastYearLy = emp.leaveYears.find((l) => l.year === y - 1);
 
-    // 올해 입사기념일
+    // 현재 활성 버킷 찾기 (startDate <= today <= endDate)
+    const activeLy = emp.leaveYears.find(
+      (l) => l.startDate && l.endDate && l.startDate <= today && l.endDate >= today,
+    );
+    // 이전 버킷 (활성 버킷 직전)
+    const prevLy = activeLy
+      ? emp.leaveYears.find((l) => l.year === activeLy.year - 1)
+      : null;
+
+    // 입사기념일 갱신 체크
     const anniv = new Date(emp.joinedAt);
     anniv.setFullYear(y);
     const annivPassed = now >= anniv;
-
-    // 갱신 필요 여부: 기념일 지남 + 올해 아직 갱신 안 됨
     const alreadyRenewed = emp.lastRenewedAt && emp.lastRenewedAt.getFullYear() === y
       && emp.lastRenewedAt >= anniv;
-    const needsRenewal = annivPassed && !alreadyRenewed;
+    const needsRenewal = annivPassed && !alreadyRenewed && prevLy;
 
-    if (needsRenewal && lastYearLy) {
-      // 이월 정책 계산
-      const remaining = round1(Math.max(0, lastYearLy.totalDays - lastYearLy.usedDays));
+    if (needsRenewal && prevLy) {
+      // 기념일 갱신: 새 버킷 생성/리셋
+      const remaining = round1(Math.max(0, prevLy.totalDays - prevLy.usedDays));
       let carryOver = 0;
       if (emp.carryOverPolicy === "CARRY_ALL") carryOver = remaining;
       else if (emp.carryOverPolicy === "CARRY_MAX5") carryOver = Math.min(remaining, 5);
       else if (emp.carryOverPolicy === "CARRY_MAX10") carryOver = Math.min(remaining, 10);
-      // EXPIRE = 0
 
       const newTotal = round1(legalDays + carryOver);
       const note = `[${today}] ${y}년 입사기념일 갱신: 법정 ${legalDays}일` +
         (carryOver > 0 ? ` + 이월 ${carryOver}일` : ` (잔여 ${remaining}일 소멸)`) +
         ` = ${newTotal}일`;
 
-      if (thisYearLy) {
-        // 이미 올해 LeaveYear 있으면 리셋
-        const prevNote = thisYearLy.note ? thisYearLy.note + "\n" : "";
+      const targetLy = emp.leaveYears.find((l) => l.year === y);
+      if (targetLy) {
+        const prevNote = targetLy.note ? targetLy.note + "\n" : "";
         await prisma.leaveYear.update({
-          where: { id: thisYearLy.id },
+          where: { id: targetLy.id },
           data: { totalDays: newTotal, usedDays: 0, carryOver: round1(carryOver), note: prevNote + note },
         });
       } else {
@@ -345,7 +360,6 @@ export async function autoRenewLeave(): Promise<{ updated: number; skipped: numb
         });
       }
 
-      // lastRenewedAt + promotionStatus 리셋
       await prisma.employee.update({
         where: { id: emp.id },
         data: { lastRenewedAt: now, totalDays: legalDays, promotionStatus: "NONE" },
@@ -356,30 +370,38 @@ export async function autoRenewLeave(): Promise<{ updated: number; skipped: numb
       continue;
     }
 
-    // 갱신 불필요 — 올해 LeaveYear 없으면 생성만
-    if (!thisYearLy) {
-      const note = `[${today}] 연차 자동 생성: 법정 ${legalDays}일`;
-      await prisma.leaveYear.create({
-        data: { employeeId: emp.id, year: y, totalDays: legalDays, usedDays: 0, carryOver: 0, note, ...calcBucketDates(emp.joinedAt, y) },
-      });
-      details.push(`${emp.name}: 신규 생성 ${legalDays}일`);
-      updated++;
-      continue;
+    // 활성 버킷이 없으면 생성
+    if (!activeLy) {
+      // 올바른 버킷 연도 계산: 오늘이 속하는 입사기념일 기간의 시작 연도
+      const bucketYear = calcBucketYear(emp.joinedAt, now);
+      const exists = emp.leaveYears.find((l) => l.year === bucketYear);
+      if (!exists) {
+        const note = `[${today}] 연차 자동 생성: 법정 ${legalDays}일`;
+        await prisma.leaveYear.create({
+          data: { employeeId: emp.id, year: bucketYear, totalDays: legalDays, usedDays: 0, carryOver: 0, note, ...calcBucketDates(emp.joinedAt, bucketYear) },
+        });
+        details.push(`${emp.name}: 신규 생성 ${legalDays}일 (year=${bucketYear})`);
+        updated++;
+        continue;
+      }
     }
 
-    // 법정보다 낮으면 증가 (이월분 제외한 기본 일수 기준)
-    const baseDays = round1(thisYearLy.totalDays - thisYearLy.carryOver);
-    if (baseDays < legalDays) {
-      const newTotal = round1(legalDays + thisYearLy.carryOver);
-      const diff = round1(newTotal - thisYearLy.totalDays);
-      const prevNote = thisYearLy.note ? thisYearLy.note + "\n" : "";
-      await prisma.leaveYear.update({
-        where: { id: thisYearLy.id },
-        data: { totalDays: newTotal, note: prevNote + `[${today}] 법정 갱신 +${diff}일 → ${newTotal}일 (법정${legalDays}+이월${thisYearLy.carryOver})` },
-      });
-      details.push(`${emp.name}: +${diff} → ${newTotal}일`);
-      updated++;
-      continue;
+    // 활성 버킷의 법정 일수 갱신 (이월분 제외 기준)
+    const target = activeLy ?? emp.leaveYears[0];
+    if (target) {
+      const baseDays = round1(target.totalDays - target.carryOver);
+      if (baseDays < legalDays) {
+        const newTotal = round1(legalDays + target.carryOver);
+        const diff = round1(newTotal - target.totalDays);
+        const prevNote = target.note ? target.note + "\n" : "";
+        await prisma.leaveYear.update({
+          where: { id: target.id },
+          data: { totalDays: newTotal, note: prevNote + `[${today}] 법정 갱신 +${diff}일 → ${newTotal}일` },
+        });
+        details.push(`${emp.name}: +${diff} → ${newTotal}일`);
+        updated++;
+        continue;
+      }
     }
 
     skipped++;
