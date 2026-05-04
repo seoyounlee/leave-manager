@@ -462,8 +462,10 @@ export async function getEmployees(
   includeResigned = false,
 ): Promise<EmployeeWithYear[]> {
   const y = year ?? currentYear();
-  const yearStart = `${y}-01-01`;
-  const yearEnd = `${y}-12-31`;
+
+  // 기준일: 현재 연도면 오늘, 과거 연도면 해당 연도 12/31
+  const today = new Date().toISOString().slice(0, 10);
+  const refDate = y === currentYear() ? today : `${y}-12-31`;
 
   const where: Record<string, unknown> = {};
   if (!includeResigned) where.status = "ACTIVE";
@@ -472,30 +474,19 @@ export async function getEmployees(
   const emps = await prisma.employee.findMany({
     where,
     include: {
-      // 해당 연도에 "걸치는" 모든 LeaveYear를 가져옴
-      // startDate <= yearEnd AND endDate >= yearStart
-      leaveYears: {
-        where: {
-          OR: [
-            { startDate: { lte: yearEnd }, endDate: { gte: yearStart } },
-            { startDate: null }, // startDate 미설정 레거시 → year로 fallback
-          ],
-        },
-        orderBy: { year: "desc" },
-      },
+      leaveYears: { orderBy: { year: "desc" } },
     },
     orderBy: { name: "asc" },
   });
 
   return emps.map((e) => {
-    // 해당 연도에 가장 관련 있는 LeaveYear 선택
-    // 1) startDate/endDate가 해당 연도에 걸치는 것 중 가장 최근
-    // 2) fallback: year가 일치하는 것
-    const overlapping = e.leaveYears.find(
-      (ly) => ly.startDate && ly.endDate && ly.startDate <= yearEnd && ly.endDate >= yearStart,
+    // 기준일에 활성인 버킷 찾기: startDate <= refDate AND endDate >= refDate
+    const active = e.leaveYears.find(
+      (ly) => ly.startDate && ly.endDate && ly.startDate <= refDate && ly.endDate >= refDate,
     );
-    const fallback = e.leaveYears.find((ly) => ly.year === y);
-    return toEmployeeView(e, overlapping ?? fallback ?? null);
+    // fallback: year 매칭 또는 가장 최근 버킷
+    const fallback = e.leaveYears.find((ly) => ly.year === y) ?? e.leaveYears[0] ?? null;
+    return toEmployeeView(e, active ?? fallback);
   });
 }
 
