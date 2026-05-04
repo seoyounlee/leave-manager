@@ -169,7 +169,7 @@ function toRequestView(req: LeaveRequest & { employee: { name: string } }): Requ
     type: req.type as LeaveType,
     days: req.days,
     year: req.year,
-    bucketLabel: `${req.year}차`,
+    bucketLabel: `${req.year}년차`,
     reason: req.reason,
     status: req.status as RequestStatus,
     createdAt: req.createdAt.toISOString(),
@@ -400,9 +400,10 @@ export async function getRenewalCountdown(): Promise<Array<{
   const y = now.getFullYear();
   const todayMs = now.getTime();
 
+  const todayStr = now.toISOString().slice(0, 10);
   const emps = await prisma.employee.findMany({
     where: { status: "ACTIVE" },
-    include: { leaveYears: { where: { year: y } } },
+    include: { leaveYears: { where: { startDate: { lte: todayStr }, endDate: { gte: todayStr } }, take: 1 } },
   });
 
   const results: Array<{
@@ -461,18 +462,41 @@ export async function getEmployees(
   includeResigned = false,
 ): Promise<EmployeeWithYear[]> {
   const y = year ?? currentYear();
+  const yearStart = `${y}-01-01`;
+  const yearEnd = `${y}-12-31`;
+
   const where: Record<string, unknown> = {};
   if (!includeResigned) where.status = "ACTIVE";
-  // 입사 연도 필터: 해당 연도 말일 이전에 입사한 직원만
   where.joinedAt = { lte: new Date(`${y}-12-31T23:59:59.999Z`) };
 
   const emps = await prisma.employee.findMany({
     where,
-    include: { leaveYears: { where: { year: y } } },
+    include: {
+      // 해당 연도에 "걸치는" 모든 LeaveYear를 가져옴
+      // startDate <= yearEnd AND endDate >= yearStart
+      leaveYears: {
+        where: {
+          OR: [
+            { startDate: { lte: yearEnd }, endDate: { gte: yearStart } },
+            { startDate: null }, // startDate 미설정 레거시 → year로 fallback
+          ],
+        },
+        orderBy: { year: "desc" },
+      },
+    },
     orderBy: { name: "asc" },
   });
 
-  return emps.map((e) => toEmployeeView(e, e.leaveYears[0] ?? null));
+  return emps.map((e) => {
+    // 해당 연도에 가장 관련 있는 LeaveYear 선택
+    // 1) startDate/endDate가 해당 연도에 걸치는 것 중 가장 최근
+    // 2) fallback: year가 일치하는 것
+    const overlapping = e.leaveYears.find(
+      (ly) => ly.startDate && ly.endDate && ly.startDate <= yearEnd && ly.endDate >= yearStart,
+    );
+    const fallback = e.leaveYears.find((ly) => ly.year === y);
+    return toEmployeeView(e, overlapping ?? fallback ?? null);
+  });
 }
 
 // ─── 직원 추가 ──────────────────────────────────────────────────────────────
@@ -743,7 +767,10 @@ export async function getRequests(
   const where: Record<string, unknown> = {};
   if (filters.employeeId) where.employeeId = filters.employeeId;
   if (filters.status) where.status = filters.status;
-  if (filters.year) where.year = filters.year;
+  // year 필터: 연차 날짜가 해당 연도에 포함되는 요청
+  if (filters.year) {
+    where.date = { gte: `${filters.year}-01-01`, lte: `${filters.year}-12-31` };
+  }
 
   const reqs = await prisma.leaveRequest.findMany({
     where,
@@ -863,7 +890,7 @@ export async function approveRequest(
     console.error("[GCal] 승인 후 캘린더 등록 실패:", gcalError);
   }
 
-  const y = req.year;
+  const y = parseInt(req.date.slice(0, 4));
   const result = { employees: await getEmployees(y), requests: await getRequests({ year: y }), gcalError };
   return result as { employees: EmployeeWithYear[]; requests: RequestView[]; gcalError?: string };
 }
@@ -885,7 +912,7 @@ export async function rejectRequest(
     data: { status: "REJECTED", reviewedAt: new Date(), reviewNote: note ?? null },
   });
 
-  const y = req.year;
+  const y = parseInt(req.date.slice(0, 4));
   return { employees: await getEmployees(y), requests: await getRequests({ year: y }) };
 }
 
@@ -932,7 +959,7 @@ export async function cancelApproved(
     });
   }
 
-  const y = req.year;
+  const y = parseInt(req.date.slice(0, 4));
   return { employees: await getEmployees(y), requests: await getRequests({ year: y }) };
 }
 
