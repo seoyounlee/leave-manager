@@ -844,23 +844,24 @@ export async function approveRequest(
     throw new Error(`승인할 수 없는 상태입니다. (현재: ${STATUS_KO[req.status as RequestStatus]})`);
   }
 
-  const ly = await prisma.leaveYear.findUnique({
-    where: { employeeId_year: { employeeId: req.employeeId, year: req.year } },
-  });
-  if (!ly) throw new Error("해당 연도의 연차 기간이 없습니다.");
+  // 연차 날짜 기준으로 올바른 버킷 찾기
+  const ly = await findBucketForDate(req.employeeId, req.date);
+  if (!ly) throw new Error(`${req.date}에 해당하는 연차 기간이 없습니다.`);
 
   const remaining = round1(ly.totalDays - ly.usedDays);
   if (req.days > remaining) {
     throw new Error(`잔여 연차(${remaining}일)가 부족합니다. (신청: ${req.days}일)`);
   }
 
-  // 직원 이름 조회
   const emp = await prisma.employee.findUnique({ where: { id: req.employeeId } });
+
+  // req.year가 버킷과 다르면 수정 (레거시 데이터 보정)
+  const correctYear = ly.year;
 
   await prisma.$transaction([
     prisma.leaveRequest.update({
       where: { id: requestId },
-      data: { status: "APPROVED", reviewedAt: new Date(), reviewNote: note ?? null },
+      data: { status: "APPROVED", reviewedAt: new Date(), reviewNote: note ?? null, year: correctYear },
     }),
     prisma.leaveYear.update({
       where: { id: ly.id },
@@ -918,9 +919,8 @@ export async function cancelApproved(
     throw new Error(`승인 취소할 수 없는 상태입니다. (현재: ${STATUS_KO[req.status as RequestStatus]})`);
   }
 
-  const ly = await prisma.leaveYear.findUnique({
-    where: { employeeId_year: { employeeId: req.employeeId, year: req.year } },
-  });
+  // 연차 날짜 기준으로 올바른 버킷 찾기
+  const ly = await findBucketForDate(req.employeeId, req.date);
 
   // Google Calendar 이벤트 삭제
   if (req.googleEventId) {
@@ -964,9 +964,7 @@ export async function deleteRequest(
 
   // 승인된 건이면 usedDays 복원
   if (req.status === "APPROVED") {
-    const ly = await prisma.leaveYear.findUnique({
-      where: { employeeId_year: { employeeId: req.employeeId, year: req.year } },
-    });
+    const ly = await findBucketForDate(req.employeeId, req.date);
     if (ly) {
       await prisma.leaveYear.update({
         where: { id: ly.id },
